@@ -2,3 +2,6 @@
 	path = external/libimagequant
 	url = https://github.com/ImageOptim/libimagequant
 	branch = 2.x
+[submodule "external/narc"]
+	path = external/narc
+	url = https://github.com/Fexty12573/narc

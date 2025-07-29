@@ -245,6 +245,8 @@ std::vector<u8> SPLTexture::convertTo8bpp() const {
     case TextureFormat::Count:
         return {};
     }
+
+    return {};
 }
 
 size_t SPLTexture::getPaletteSize() const {
@@ -265,6 +267,8 @@ size_t SPLTexture::getPaletteSize() const {
     case TextureFormat::Count:
         return 0;
     }
+
+    return 0;
 }
 
 TextureImportSpecification SPLTexture::suggestSpecification(
