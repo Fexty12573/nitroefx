@@ -19,6 +19,12 @@ EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp)
     m_updateProj = true;
     notifyResourceChanged(0);
 
+    // Choose particle renderer backend
+    if (g_application->getEditor()->getSettings().useLegacyParticleRenderer) {
+        m_particleSystem.useLegacyRenderer();
+        m_particleSystem.getRenderer().setTextures(m_archive.getTextures());
+    }
+
     m_camera.setProjection(
         g_application->getEditor()->getSettings().useOrthographicCamera
             ? CameraProjection::Orthographic
@@ -34,6 +40,12 @@ EditorInstance::EditorInstance(bool isTemp)
 
     g_application->getEditor()->selectResource(m_uniqueID, -1);
     notifyResourceChanged(-1);
+
+    // Choose particle renderer backend
+    if (g_application->getEditor()->getSettings().useLegacyParticleRenderer) {
+        m_particleSystem.useLegacyRenderer();
+        m_particleSystem.getRenderer().setTextures(m_archive.getTextures());
+    }
 
     m_camera.setProjection(
         g_application->getEditor()->getSettings().useOrthographicCamera
@@ -144,6 +156,16 @@ void EditorInstance::handleEvent(const SDL_Event& event) {
             m_camera.reset();
         }
     }
+}
+
+void EditorInstance::useModernRenderer() {
+    m_particleSystem.useModernRenderer();
+    m_particleSystem.getRenderer().setTextures(m_archive.getTextures());
+}
+
+void EditorInstance::useLegacyRenderer() {
+    m_particleSystem.useLegacyRenderer();
+    m_particleSystem.getRenderer().setTextures(m_archive.getTextures());
 }
 
 bool EditorInstance::notifyClosing() {

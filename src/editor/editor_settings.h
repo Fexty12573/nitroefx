@@ -21,6 +21,7 @@ struct EditorSettings {
     glm::vec4 collisionPlaneKillColor = { 1.0f, 0.0f, 0.0f, 0.3f }; // Color of the collision plane (kill mode)
     glm::vec4 backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f }; // Background color of the viewport
     u32 maxParticles = 1000; // Maximum number of particles to process
+    bool useLegacyParticleRenderer = false; // Use legacy OpenGL-style particle renderer
 };
 
 

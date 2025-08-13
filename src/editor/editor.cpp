@@ -979,6 +979,7 @@ void Editor::renderSettings() {
 
         ImGui::SeparatorText("Rendering");
         bool changed = false;
+        bool swapRenderer = false;
 
         changed |= ImGui::Checkbox("Use DS Resolution", &m_settings.useFixedDsResolution);
         ImGui::SameLine();
@@ -993,8 +994,13 @@ void Editor::renderSettings() {
             m_settings.fixedDsResolutionScale = glm::clamp(m_settings.fixedDsResolutionScale, 1, 8);
         }
 
+        if (ImGui::Checkbox("Use Accurate Renderer", &m_settings.useLegacyParticleRenderer)) {
+            changed = true;
+            swapRenderer = true;
+        }
+
         if (changed) {
-            updateRenderSettings(); // Update all open editors
+            updateRenderSettings(swapRenderer); // Update all open editors
         }
 
         if (ImGui::Button("Reset to Defaults")) {
@@ -1037,10 +1043,20 @@ void Editor::renderSettings() {
     ImGui::PopStyleVar();
 }
 
-void Editor::updateRenderSettings() {
+void Editor::updateRenderSettings(bool swapRenderer) {
+    const auto legacyRenderer = m_settings.useLegacyParticleRenderer;
     const auto editors = g_projectManager->getOpenEditors();
+
     for (const auto& editor : editors) {
         editor->updateViewportSize();
+
+        if (swapRenderer) {
+            if (legacyRenderer) {
+                editor->useLegacyRenderer();
+            } else {
+                editor->useModernRenderer();
+            }
+        }
     }
 }
 

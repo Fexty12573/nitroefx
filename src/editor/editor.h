@@ -64,7 +64,7 @@ private:
     void renderResourceEditor();
     void renderSettings();
 
-    void updateRenderSettings();
+    void updateRenderSettings(bool swapRenderer = false);
 
     void renderHeaderEditor(SPLResourceHeader& header) const;
     void renderBehaviorEditor(SPLResource& res);

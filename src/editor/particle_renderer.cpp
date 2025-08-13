@@ -1,9 +1,16 @@
 #include "particle_renderer.h"
 #include "gfx/gl_util.h"
+#include "editor/camera.h"
+#include "spl/spl_particle.h"
+#include "spl/spl_emitter.h"
 
 #include <algorithm>
 #include <GL/glew.h>
+#include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/geometric.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtx/norm.hpp>
 #include <numeric>
 #include <ranges>
 #include <spdlog/spdlog.h>
@@ -67,7 +74,7 @@ void main() {
 
 }
 
-ParticleRenderer::ParticleRenderer(u32 maxInstances, std::span<const SPLTexture> textures)
+ModernParticleRenderer::ModernParticleRenderer(u32 maxInstances, std::span<const SPLTexture> textures)
     : m_maxInstances(maxInstances), m_shader(s_lineVertexShader, s_fragmentShader)
     , m_textures(textures), m_view(1.0f), m_proj(1.0f) {
 
@@ -126,7 +133,7 @@ ParticleRenderer::ParticleRenderer(u32 maxInstances, std::span<const SPLTexture>
     m_shader.unbind();
 }
 
-void ParticleRenderer::begin(const glm::mat4& view, const glm::mat4& proj) {
+void ModernParticleRenderer::begin(const glm::mat4& view, const glm::mat4& proj) {
     for (auto& particles : m_particles) {
         particles.clear();
     }
@@ -137,7 +144,7 @@ void ParticleRenderer::begin(const glm::mat4& view, const glm::mat4& proj) {
     m_proj = proj;
 }
 
-void ParticleRenderer::end() {
+void ModernParticleRenderer::end() {
 
     m_shader.bind();
     glCall(glActiveTexture(GL_TEXTURE0));
@@ -163,7 +170,7 @@ void ParticleRenderer::end() {
     m_isRendering = false;
 }
 
-void ParticleRenderer::submit(u32 texture, const ParticleInstance& instance) {
+void ModernParticleRenderer::submit(u32 texture, const ParticleInstance& instance) {
     if (m_particleCount >= m_maxInstances) {
         return;
     }
@@ -177,7 +184,7 @@ void ParticleRenderer::submit(u32 texture, const ParticleInstance& instance) {
     ++m_particleCount;
 }
 
-void ParticleRenderer::setTextures(std::span<const SPLTexture> textures) {
+void ModernParticleRenderer::setTextures(std::span<const SPLTexture> textures) {
     if (m_isRendering) {
         throw std::runtime_error("Cannot set textures while rendering");
     }
@@ -190,7 +197,7 @@ void ParticleRenderer::setTextures(std::span<const SPLTexture> textures) {
     }
 }
 
-void ParticleRenderer::setMaxInstances(u32 maxInstances) {
+void ModernParticleRenderer::setMaxInstances(u32 maxInstances) {
     if (m_isRendering) {
         throw std::runtime_error("Cannot set max instances while rendering");
     }
@@ -198,4 +205,285 @@ void ParticleRenderer::setMaxInstances(u32 maxInstances) {
     m_maxInstances = maxInstances;
     glCall(glBindBuffer(GL_ARRAY_BUFFER, m_transformVbo));
     glCall(glBufferData(GL_ARRAY_BUFFER, m_maxInstances * sizeof(ParticleInstance), nullptr, GL_DYNAMIC_DRAW));
+}
+
+// Move SPLParticle drawing logic here for the modern backend
+void ModernParticleRenderer::renderParticle(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto* resource = particle.emitter->getResource();
+    const auto& drawType = resource->header.flags.drawType;
+
+    auto submitBillboard = [&](bool directional) {
+        glm::vec3 scale = { particle.baseScale * resource->header.aspectRatio, particle.baseScale, 1 };
+
+        switch (resource->header.misc.scaleAnimDir) {
+        case SPLScaleAnimDir::XY:
+            scale.x *= particle.animScale; scale.y *= particle.animScale; break;
+        case SPLScaleAnimDir::X:
+            scale.x *= particle.animScale; break;
+        case SPLScaleAnimDir::Y:
+            scale.y *= particle.animScale; break;
+        }
+
+        if (!directional) {
+            const glm::vec3 particlePos = particle.emitterPos + particle.position;
+            const glm::vec3 viewAxis = glm::normalize(params.pos - particlePos);
+
+            glm::mat4 orientation(1.0f);
+            orientation[0][0] = params.right.x; orientation[0][1] = params.right.y; orientation[0][2] = params.right.z; orientation[0][3] = 0.0f;
+            orientation[1][0] = params.up.x;    orientation[1][1] = params.up.y;    orientation[1][2] = params.up.z;    orientation[1][3] = 0.0f;
+            orientation[2][0] = viewAxis.x;     orientation[2][1] = viewAxis.y;     orientation[2][2] = viewAxis.z;     orientation[2][3] = 0.0f;
+
+            const auto transform = glm::translate(glm::mat4(1), particlePos)
+                * orientation
+                * glm::rotate(glm::mat4(1), particle.rotation, { 0, 0, 1 })
+                * glm::scale(glm::mat4(1), scale);
+
+                ParticleInstance inst{};
+                inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+                inst.transform = transform;
+                inst.texCoords[0] = { 0, t };
+                inst.texCoords[1] = { s, t };
+                inst.texCoords[2] = { s, 0 };
+                inst.texCoords[3] = { 0, 0 };
+                submit(particle.texture, inst);
+            return;
+        }
+
+        // Directional billboard path (ported from SPLParticle::renderDirectionalBillboard)
+    glm::vec3 dir = glm::cross(particle.velocity, params.forward);
+    if (glm::dot(dir, dir) < 0.0001f) {
+            return;
+        }
+
+        dir = glm::normalize(dir);
+        const auto velDir = glm::normalize(particle.velocity);
+
+    f32 dot = glm::dot(velDir, -params.forward);
+        if (dot < 0.0f) { // Particle is behind the camera
+            dot = -dot;
+        }
+
+        scale.y *= (1.0f - dot) * resource->header.misc.dbbScale + 1.0f;
+        const auto pos = glm::vec4(particle.emitterPos + particle.position, 1) * params.view;
+        const auto transform = glm::mat4(
+            dir.x * scale.x, dir.y * scale.x, 0, 0,
+            -dir.y * scale.y, dir.x * scale.y, 0, 0,
+            0, 0, 1, 0,
+            pos.x, pos.y, pos.z, 1
+        );
+
+            ParticleInstance inst{};
+            inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+            inst.transform = transform;
+            inst.texCoords[0] = { 0, 0 };
+            inst.texCoords[1] = { s, 0 };
+            inst.texCoords[2] = { s, t };
+            inst.texCoords[3] = { 0, t };
+            submit(particle.texture, inst);
+    };
+
+    switch (drawType) {
+    case SPLDrawType::Billboard:
+        submitBillboard(false);
+        break;
+    case SPLDrawType::DirectionalBillboard:
+        submitBillboard(true);
+        break;
+    case SPLDrawType::Polygon:
+    case SPLDrawType::DirectionalPolygon:
+    case SPLDrawType::DirectionalPolygonCenter:
+        // Not yet implemented in either backend
+        break;
+    }
+}
+
+void LegacyParticleRenderer::begin(const glm::mat4& view, const glm::mat4& proj) {
+    // Load camera projection and view matrices
+    glCall(glMatrixMode(GL_PROJECTION));
+    glCall(glPushMatrix());
+    glCall(glLoadMatrixf(glm::value_ptr(proj)));
+
+    glCall(glMatrixMode(GL_MODELVIEW));
+    glCall(glPushMatrix());
+    glCall(glLoadMatrixf(glm::value_ptr(view)));
+
+    glCall(glActiveTexture(GL_TEXTURE0));
+    glCall(glEnable(GL_TEXTURE_2D));
+}
+
+void LegacyParticleRenderer::end() {
+    // Restore matrices
+    glCall(glMatrixMode(GL_MODELVIEW));
+    glCall(glPopMatrix());
+    glCall(glMatrixMode(GL_PROJECTION));
+    glCall(glPopMatrix());
+}
+
+void LegacyParticleRenderer::renderParticle(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    bindTexture(particle.texture);
+
+    const auto* resource = particle.emitter->getResource();
+    const auto drawType = resource->header.flags.drawType;
+
+    switch (drawType) {
+    case SPLDrawType::Billboard:
+        renderBillboard(particle, params, s, t);
+        break;
+    }
+}
+
+void LegacyParticleRenderer::drawXYPlane(f32 s, f32 t, f32 x, f32 y) const {
+    begin(PolygonMode::Modulate, CullMode::None, false);
+
+    glTexCoord2f(0, 0);
+    glVertex3f(x - 1.0f, y + 1.0f, 0.0f); // Top left
+
+    glTexCoord2f(s, 0);
+    glVertex3f(x + 1.0f, y + 1.0f, 0.0f); // Top right
+
+    glTexCoord2f(s, t);
+    glVertex3f(x + 1.0f, y - 1.0f, 0.0f); // Bottom right
+
+    glTexCoord2f(0, t);
+    glVertex3f(x - 1.0f, y - 1.0f, 0.0f); // Bottom left
+
+    glEnd();
+}
+
+void LegacyParticleRenderer::drawXZPlane(f32 s, f32 t, f32 x, f32 z) const {
+    begin(PolygonMode::Modulate, CullMode::None, false);
+
+    glTexCoord2f(0, 0);
+    glVertex3f(x - 1.0f, 0.0f, z + 1.0f); // Top left
+
+    glTexCoord2f(s, 0);
+    glVertex3f(x + 1.0f, 0.0f, z + 1.0f); // Top right
+
+    glTexCoord2f(s, t);
+    glVertex3f(x + 1.0f, 0.0f, z - 1.0f); // Bottom right
+
+    glTexCoord2f(0, t);
+    glVertex3f(x - 1.0f, 0.0f, z - 1.0f); // Bottom left
+
+    glEnd();
+}
+
+glm::mat4 LegacyParticleRenderer::rotateY(f32 sin, f32 cos) const {
+    return glm::mat4(
+        cos, 0, sin, 0,
+        0, 1, 0, 0,
+        -sin, 0, cos, 0,
+        0, 0, 0, 1
+    );
+}
+
+glm::mat4 LegacyParticleRenderer::rotateXYZ(f32 sin, f32 cos) const {
+    f32 C = (1.0f - cos) / 3.0f;
+    f32 Sm = C + sin * glm::sqrt(1.0f / 3.0f);
+    f32 Sp = C - sin * glm::sqrt(1.0f / 3.0f);
+    C += cos;
+
+    return glm::mat4(
+        C, Sm, Sp, 0,
+        Sp, C, Sm, 0,
+        Sm, Sp, C, 0,
+        0, 0, 0, 1
+    );
+}
+
+void LegacyParticleRenderer::bindTexture(u32 textureIndex) const {
+    const auto& texture = m_textures[textureIndex];
+    if (!texture.glTexture) {
+        spdlog::warn("Attempted to bind invalid texture at index {}", textureIndex);
+        return;
+    }
+
+    glCall(glBindTexture(GL_TEXTURE_2D, texture.glTexture->getHandle()));
+    glCall(glMatrixMode(GL_TEXTURE));
+    glCall(glLoadIdentity());
+    glCall(glScalef(1.0f, 1.0f, 1.0f));
+    glCall(glMatrixMode(GL_MODELVIEW));
+}
+
+void LegacyParticleRenderer::begin(PolygonMode polygonMode, CullMode cullMode, bool fog) const {
+    switch (polygonMode) {
+    case PolygonMode::Modulate:
+    case PolygonMode::Toon:
+    case PolygonMode::Shadow:
+        glCall(glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE));
+        break;
+    case PolygonMode::Decal:
+        glCall(glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL));
+        break;
+    }
+
+    if (cullMode == CullMode::None) {
+        glCall(glDisable(GL_CULL_FACE));
+    } else {
+        glCall(glEnable(GL_CULL_FACE));
+        switch (cullMode) {
+        case CullMode::Back:
+            glCall(glCullFace(GL_BACK));
+            break;
+        case CullMode::Front:
+            glCall(glCullFace(GL_FRONT));
+            break;
+        case CullMode::Both:
+            glCall(glCullFace(GL_FRONT_AND_BACK));
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (fog) {
+        glCall(glEnable(GL_FOG));
+    } else {
+        glCall(glDisable(GL_FOG));
+    }
+
+    // Ensure no VAO or shader program is bound
+    glBindVertexArray(0);
+    glUseProgram(0);
+
+    glBegin(GL_QUADS);
+}
+
+void LegacyParticleRenderer::renderBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto& resource = particle.emitter->getResource();
+    const auto& misc = resource->header.misc;
+
+    glm::vec3 scale = { particle.baseScale * resource->header.aspectRatio, particle.baseScale, 1.0f };
+
+    switch (misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale; scale.y *= particle.animScale; break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale; break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale; break;
+    }
+
+    glm::vec4 particlePos = glm::vec4(particle.emitterPos + particle.position, 1.0f);
+    particlePos = particlePos * params.view;
+
+    const auto sin = glm::sin(particle.rotation);
+    const auto cos = glm::cos(particle.rotation);
+
+    glm::mat4 mtx{
+        cos * scale.x, -sin * scale.y, 0.0f, particlePos.x,
+        sin * scale.x,  cos * scale.y, 0.0f, particlePos.y,
+        0.0f,           0.0f,          1.0f, particlePos.z,
+        0.0f,           0.0f,          0.0f, 1.0f
+    };
+
+    // Multiply model on top of view (loaded in begin())
+    glCall(glMatrixMode(GL_MODELVIEW));
+    glCall(glPushMatrix());
+    glCall(glMultMatrixf(glm::value_ptr(mtx)));
+    glCall(glColor4f(particle.color.r, particle.color.g, particle.color.b, particle.visibility.baseAlpha * particle.visibility.animAlpha));
+
+    drawXYPlane(s, t, resource->header.polygonX, resource->header.polygonY);
+
+    glCall(glPopMatrix());
 }

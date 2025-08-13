@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 
+#include <memory>
 #include <queue>
 #include <vector>
 
@@ -30,14 +31,18 @@ public:
     u32 getMaxParticles() const { return m_maxParticles; }
     u32 getParticleCount() const { return m_maxParticles - (u32)m_availableParticles.size(); }
 
-    ParticleRenderer& getRenderer() { return m_renderer; }
+    ParticleRenderer& getRenderer() { return *m_renderer; }
     std::span<const std::shared_ptr<SPLEmitter>> getEmitters() const { return m_emitters; }
+
+    // Future: allow switching backend at runtime
+    void useLegacyRenderer();
+    void useModernRenderer();
 
 private:
     void forceKillAllEmitters();
 
 private:
-    ParticleRenderer m_renderer;
+    std::unique_ptr<ParticleRenderer> m_renderer;
     std::queue<SPLParticle*> m_availableParticles;
     std::vector<std::shared_ptr<SPLEmitter>> m_emitters;
     bool m_cycle = false;

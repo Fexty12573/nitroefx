@@ -22,6 +22,9 @@ public:
     void updateParticles(float deltaTime);
     void handleEvent(const SDL_Event& event);
 
+    void useModernRenderer();
+    void useLegacyRenderer();
+
     bool notifyClosing();
     void notifyResourceChanged(size_t index);
     bool valueChanged(bool changed);
