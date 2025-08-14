@@ -64,10 +64,6 @@ uniform sampler2D tex;
 
 void main() {
     vec4 outColor = fragColor * texture(tex, texCoord);
-    if (outColor.a < 0.1) {
-        discard;
-    }
-
     color = outColor;
 }
 )"sv;
@@ -184,6 +180,114 @@ void ModernParticleRenderer::submit(u32 texture, const ParticleInstance& instanc
     ++m_particleCount;
 }
 
+void ModernParticleRenderer::renderBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto* resource = particle.emitter->getResource();
+    glm::vec3 scale = { particle.baseScale * resource->header.aspectRatio, particle.baseScale, 1 };
+
+    switch (resource->header.misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale; scale.y *= particle.animScale; break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale; break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale; break;
+    }
+
+    const glm::vec3 particlePos = particle.emitterPos + particle.position;
+    const glm::vec3 viewAxis = glm::normalize(params.pos - particlePos);
+
+    glm::mat4 orientation(1.0f);
+    orientation[0][0] = params.right.x; orientation[0][1] = params.right.y; orientation[0][2] = params.right.z; orientation[0][3] = 0.0f;
+    orientation[1][0] = params.up.x;    orientation[1][1] = params.up.y;    orientation[1][2] = params.up.z;    orientation[1][3] = 0.0f;
+    orientation[2][0] = viewAxis.x;     orientation[2][1] = viewAxis.y;     orientation[2][2] = viewAxis.z;     orientation[2][3] = 0.0f;
+
+    const auto transform = glm::translate(glm::mat4(1), particlePos)
+        * orientation
+        * glm::rotate(glm::mat4(1), particle.rotation, { 0, 0, 1 })
+        * glm::scale(glm::mat4(1), scale);
+
+    ParticleInstance inst{};
+    inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+    inst.transform = transform;
+    inst.texCoords[0] = { 0, t };
+    inst.texCoords[1] = { s, t };
+    inst.texCoords[2] = { s, 0 };
+    inst.texCoords[3] = { 0, 0 };
+    submit(particle.texture, inst);
+}
+
+void ModernParticleRenderer::renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto* resource = particle.emitter->getResource();
+    glm::vec3 scale = { particle.baseScale * resource->header.aspectRatio, particle.baseScale, 1 };
+
+    switch (resource->header.misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale;
+        scale.y *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale;
+        break;
+    }
+
+    //glm::vec3 dir = glm::cross(particle.velocity, params.forward);
+    //if (glm::dot(dir, dir) < 0.0001f) {
+    //    return;
+    //}
+
+    //dir = glm::normalize(dir);
+    //const auto velDir = glm::normalize(particle.velocity);
+
+    //f32 dot = glm::dot(velDir, -params.forward);
+    //if (dot < 0.0f) { // Particle is behind the camera
+    //    dot = -dot;
+    //}
+
+    //scale.y *= (1.0f - dot) * resource->header.misc.dbbScale + 1.0f;
+    //const auto pos = glm::vec4(particle.emitterPos + particle.position, 1) * params.view;
+    //const auto transform = glm::mat4(
+    //    dir.x * scale.x, dir.y * scale.x, 0, 0,
+    //    -dir.y * scale.y, dir.x * scale.y, 0, 0,
+    //    0, 0, 1, 0,
+    //    pos.x, pos.y, pos.z, 1
+    //);
+
+    const glm::vec3 v = particle.velocity;
+    const glm::vec3 f = params.forward;
+    glm::vec3 d = glm::cross(v, f);
+
+    if (glm::length2(d) == 0.0f) {
+        return;
+    }
+
+    d = glm::normalize(d);
+
+    const glm::vec3 y = glm::normalize(glm::cross(f, d));
+    const glm::vec3 vhat = glm::length2(v) > 0.0f ? glm::normalize(v) : glm::vec3(0.0f, 0.0f, 0.0f);
+
+    const f32 dot = std::abs(glm::dot(vhat, -f));
+    const f32 dotScale = scale.y * (1.0f + (1.0f - dot) * resource->header.misc.dbbScale);
+
+    glm::mat4 transform(1.0f);
+    transform[0] = glm::vec4(d * scale.x, 0.0f);
+    transform[1] = glm::vec4(y * dotScale, 0.0f);
+    transform[2] = glm::vec4(f, 0.0f);
+    transform[3] = glm::vec4(particle.emitterPos + particle.position, 1.0f);
+
+    ParticleInstance inst{};
+    inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+    inst.transform = transform;
+    inst.texCoords[0] = { 0, 0 };
+    inst.texCoords[1] = { s, 0 };
+    inst.texCoords[2] = { s, t };
+    inst.texCoords[3] = { 0, t };
+
+    submit(particle.texture, inst);
+}
+
 void ModernParticleRenderer::setTextures(std::span<const SPLTexture> textures) {
     if (m_isRendering) {
         throw std::runtime_error("Cannot set textures while rendering");
@@ -207,87 +311,16 @@ void ModernParticleRenderer::setMaxInstances(u32 maxInstances) {
     glCall(glBufferData(GL_ARRAY_BUFFER, m_maxInstances * sizeof(ParticleInstance), nullptr, GL_DYNAMIC_DRAW));
 }
 
-// Move SPLParticle drawing logic here for the modern backend
 void ModernParticleRenderer::renderParticle(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
     const auto* resource = particle.emitter->getResource();
     const auto& drawType = resource->header.flags.drawType;
 
-    auto submitBillboard = [&](bool directional) {
-        glm::vec3 scale = { particle.baseScale * resource->header.aspectRatio, particle.baseScale, 1 };
-
-        switch (resource->header.misc.scaleAnimDir) {
-        case SPLScaleAnimDir::XY:
-            scale.x *= particle.animScale; scale.y *= particle.animScale; break;
-        case SPLScaleAnimDir::X:
-            scale.x *= particle.animScale; break;
-        case SPLScaleAnimDir::Y:
-            scale.y *= particle.animScale; break;
-        }
-
-        if (!directional) {
-            const glm::vec3 particlePos = particle.emitterPos + particle.position;
-            const glm::vec3 viewAxis = glm::normalize(params.pos - particlePos);
-
-            glm::mat4 orientation(1.0f);
-            orientation[0][0] = params.right.x; orientation[0][1] = params.right.y; orientation[0][2] = params.right.z; orientation[0][3] = 0.0f;
-            orientation[1][0] = params.up.x;    orientation[1][1] = params.up.y;    orientation[1][2] = params.up.z;    orientation[1][3] = 0.0f;
-            orientation[2][0] = viewAxis.x;     orientation[2][1] = viewAxis.y;     orientation[2][2] = viewAxis.z;     orientation[2][3] = 0.0f;
-
-            const auto transform = glm::translate(glm::mat4(1), particlePos)
-                * orientation
-                * glm::rotate(glm::mat4(1), particle.rotation, { 0, 0, 1 })
-                * glm::scale(glm::mat4(1), scale);
-
-                ParticleInstance inst{};
-                inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
-                inst.transform = transform;
-                inst.texCoords[0] = { 0, t };
-                inst.texCoords[1] = { s, t };
-                inst.texCoords[2] = { s, 0 };
-                inst.texCoords[3] = { 0, 0 };
-                submit(particle.texture, inst);
-            return;
-        }
-
-        // Directional billboard path (ported from SPLParticle::renderDirectionalBillboard)
-    glm::vec3 dir = glm::cross(particle.velocity, params.forward);
-    if (glm::dot(dir, dir) < 0.0001f) {
-            return;
-        }
-
-        dir = glm::normalize(dir);
-        const auto velDir = glm::normalize(particle.velocity);
-
-    f32 dot = glm::dot(velDir, -params.forward);
-        if (dot < 0.0f) { // Particle is behind the camera
-            dot = -dot;
-        }
-
-        scale.y *= (1.0f - dot) * resource->header.misc.dbbScale + 1.0f;
-        const auto pos = glm::vec4(particle.emitterPos + particle.position, 1) * params.view;
-        const auto transform = glm::mat4(
-            dir.x * scale.x, dir.y * scale.x, 0, 0,
-            -dir.y * scale.y, dir.x * scale.y, 0, 0,
-            0, 0, 1, 0,
-            pos.x, pos.y, pos.z, 1
-        );
-
-            ParticleInstance inst{};
-            inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
-            inst.transform = transform;
-            inst.texCoords[0] = { 0, 0 };
-            inst.texCoords[1] = { s, 0 };
-            inst.texCoords[2] = { s, t };
-            inst.texCoords[3] = { 0, t };
-            submit(particle.texture, inst);
-    };
-
     switch (drawType) {
     case SPLDrawType::Billboard:
-        submitBillboard(false);
+        renderBillboard(particle, params, s, t);
         break;
     case SPLDrawType::DirectionalBillboard:
-        submitBillboard(true);
+        renderDirectionalBillboard(particle, params, s, t);
         break;
     case SPLDrawType::Polygon:
     case SPLDrawType::DirectionalPolygon:
@@ -329,6 +362,9 @@ void LegacyParticleRenderer::renderParticle(const SPLParticle& particle, const C
     case SPLDrawType::Billboard:
         renderBillboard(particle, params, s, t);
         break;
+    case SPLDrawType::DirectionalBillboard:
+        renderDirectionalBillboard(particle, params, s, t);
+        break;
     }
 }
 
@@ -369,26 +405,26 @@ void LegacyParticleRenderer::drawXZPlane(f32 s, f32 t, f32 x, f32 z) const {
 }
 
 glm::mat4 LegacyParticleRenderer::rotateY(f32 sin, f32 cos) const {
-    return glm::mat4(
+    return {
         cos, 0, sin, 0,
         0, 1, 0, 0,
         -sin, 0, cos, 0,
         0, 0, 0, 1
-    );
+    };
 }
 
 glm::mat4 LegacyParticleRenderer::rotateXYZ(f32 sin, f32 cos) const {
     f32 C = (1.0f - cos) / 3.0f;
-    f32 Sm = C + sin * glm::sqrt(1.0f / 3.0f);
-    f32 Sp = C - sin * glm::sqrt(1.0f / 3.0f);
+    const f32 Sm = C + sin * glm::sqrt(1.0f / 3.0f);
+    const f32 Sp = C - sin * glm::sqrt(1.0f / 3.0f);
     C += cos;
 
-    return glm::mat4(
+    return {
         C, Sm, Sp, 0,
         Sp, C, Sm, 0,
         Sm, Sp, C, 0,
         0, 0, 0, 1
-    );
+    };
 }
 
 void LegacyParticleRenderer::bindTexture(u32 textureIndex) const {
@@ -457,33 +493,99 @@ void LegacyParticleRenderer::renderBillboard(const SPLParticle& particle, const 
 
     switch (misc.scaleAnimDir) {
     case SPLScaleAnimDir::XY:
-        scale.x *= particle.animScale; scale.y *= particle.animScale; break;
+        scale.x *= particle.animScale;
+        scale.y *= particle.animScale;
+        break;
     case SPLScaleAnimDir::X:
-        scale.x *= particle.animScale; break;
+        scale.x *= particle.animScale;
+        break;
     case SPLScaleAnimDir::Y:
-        scale.y *= particle.animScale; break;
+        scale.y *= particle.animScale;
+        break;
     }
 
-    glm::vec4 particlePos = glm::vec4(particle.emitterPos + particle.position, 1.0f);
-    particlePos = particlePos * params.view;
+    // Get world position of the particle
+    const glm::vec3 particlePos = particle.emitterPos + particle.position;
 
+    // Create proper billboard orientation using camera vectors
     const auto sin = glm::sin(particle.rotation);
     const auto cos = glm::cos(particle.rotation);
 
-    glm::mat4 mtx{
-        cos * scale.x, -sin * scale.y, 0.0f, particlePos.x,
-        sin * scale.x,  cos * scale.y, 0.0f, particlePos.y,
-        0.0f,           0.0f,          1.0f, particlePos.z,
-        0.0f,           0.0f,          0.0f, 1.0f
-    };
+    // Create rotation matrix for particle rotation around view axis
+    glm::mat4 rotationMatrix(1.0f);
+    rotationMatrix[0] = glm::vec4(cos * params.right + sin * params.up, 0.0f);
+    rotationMatrix[1] = glm::vec4(-sin * params.right + cos * params.up, 0.0f);
+    rotationMatrix[2] = glm::vec4(params.forward, 0.0f); // View direction
+    rotationMatrix[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    // Multiply model on top of view (loaded in begin())
+    rotationMatrix[0] *= scale.x;
+    rotationMatrix[1] *= scale.y;
+
+    glm::mat4 mtx = glm::translate(glm::mat4(1.0f), particlePos) * rotationMatrix;
+
+    const auto color = glm::mix(particle.color, resource->header.color, 0.5f);
+
+    // Apply the transformation
     glCall(glMatrixMode(GL_MODELVIEW));
     glCall(glPushMatrix());
     glCall(glMultMatrixf(glm::value_ptr(mtx)));
-    glCall(glColor4f(particle.color.r, particle.color.g, particle.color.b, particle.visibility.baseAlpha * particle.visibility.animAlpha));
+    glCall(glColor4f(color.r, color.g, color.b, particle.visibility.baseAlpha * particle.visibility.animAlpha));
 
     drawXYPlane(s, t, resource->header.polygonX, resource->header.polygonY);
+
+    glCall(glPopMatrix());
+}
+
+void LegacyParticleRenderer::renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    // --- 1) Compute base scales exactly like the DS ---
+    const auto& resource = particle.emitter->getResource();
+    const auto& hdr = resource->header;
+    const auto& misc = hdr.misc;
+
+    float sclY = particle.baseScale;
+    float sclX = sclY * hdr.aspectRatio;
+
+    switch (misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        sclX *= particle.animScale; sclY *= particle.animScale; break;
+    case SPLScaleAnimDir::X:
+        sclX *= particle.animScale; break;
+    case SPLScaleAnimDir::Y:
+        sclY *= particle.animScale; break;
+    }
+
+    const glm::vec3 v = particle.velocity;
+    const glm::vec3 f = params.forward;
+    glm::vec3 d = glm::cross(v, f);
+
+    if (glm::length2(d) == 0.0f) {
+        return;
+    }
+
+    d = glm::normalize(d);
+
+    const glm::vec3 y = glm::normalize(glm::cross(f, d));
+    const glm::vec3 vhat = glm::length2(v) > 0.0f ? glm::normalize(v) : glm::vec3(0.0f, 0.0f, 0.0f);
+
+    const f32 dot = std::abs(glm::dot(vhat, -f));
+    const f32 dotScale = sclY * (1.0f + (1.0f - dot) * misc.dbbScale);
+
+    glm::mat4 mtx(1.0f);
+    mtx[0] = glm::vec4(d * sclX, 0.0f);
+    mtx[1] = glm::vec4(y * dotScale, 0.0f);
+    mtx[2] = glm::vec4(f, 0.0f);
+    mtx[3] = glm::vec4(particle.emitterPos + particle.position, 1.0f);
+
+    glCall(glMatrixMode(GL_MODELVIEW));
+    glCall(glPushMatrix());
+    glCall(glMultMatrixf(glm::value_ptr(mtx)));
+
+    const auto color = glm::mix(particle.color, resource->header.color, 0.5f);
+
+    glCall(glColor4f(color.r, color.g, color.b,
+        particle.visibility.baseAlpha * particle.visibility.animAlpha));
+
+    drawXYPlane(s, t, hdr.polygonX, hdr.polygonY);
 
     glCall(glPopMatrix());
 }
