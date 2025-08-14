@@ -11,7 +11,15 @@
 SPLEmitter::SPLEmitter(const SPLResource* resource, ParticleSystem* system, bool looping, const glm::vec3& pos) {
     m_resource = resource;
     m_system = system;
-    m_state = { .looping = looping };
+    m_state = {
+        .terminate = false,
+        .emissionPaused = false,
+        .paused = false,
+        .renderingDisabled = false,
+        .started = false,
+        .looping = looping,
+        .frame1 = true
+    };
 
     m_position = pos + resource->header.emitterBasePos;
     m_particleInitVelocity = {};
@@ -87,13 +95,15 @@ void SPLEmitter::update(float deltaTime) {
     constexpr auto wrap_f32 = [](f32 x) { return x - std::floor(x); };
 
     if (!m_state.terminate) {
-        if (header.misc.emissionInterval == 0.0f || m_age == 0.0f) { // Special handling for the first frame, where lifeTime == emissionInterval
+        if (m_emissionInterval == 0.0f || m_state.frame1) { // Special handling for the first frame, where lifeTime == emissionInterval
+            spdlog::info("Frame 1 emission");
             emit((u32)header.emissionCount);
         } else {
             if (m_age <= header.emitterLifeTime) {
-                while (m_emissionTimer >= header.misc.emissionInterval) {
+                while (m_emissionTimer >= m_emissionInterval) {
+                    spdlog::info("Emitting {} particles, timer={}, interval={}", header.emissionCount, m_emissionTimer, m_emissionInterval);
                     emit((u32)header.emissionCount);
-                    m_emissionTimer -= header.misc.emissionInterval;
+                    m_emissionTimer -= m_emissionInterval;
                 }
             }
         }
@@ -236,10 +246,12 @@ void SPLEmitter::update(float deltaTime) {
 
     m_age += deltaTime;
     m_emissionTimer += deltaTime;
+    m_state.frame1 = false;
 
     if (m_state.looping && m_age > header.emitterLifeTime) {
         m_age = 0;
         m_emissionTimer = 0;
+        m_state.frame1 = true;
     }
 
     for (const auto ptcl : particlesToRemove) {

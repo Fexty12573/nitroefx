@@ -16,6 +16,7 @@ struct SPLEmitterState {
     bool renderingDisabled;
     bool started;
     bool looping;
+    bool frame1;
 };
 
 class SPLEmitter {
