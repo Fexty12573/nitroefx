@@ -336,6 +336,7 @@ void Editor::loadConfig(const nlohmann::json& config) {
     m_settings.editedEmitterColor = loadVec4(settings, "editedEmitterColor", m_settingsDefault.editedEmitterColor);
     m_settings.collisionPlaneBounceColor = loadVec4(settings, "collisionPlaneBounceColor", m_settingsDefault.collisionPlaneBounceColor);
     m_settings.collisionPlaneKillColor = loadVec4(settings, "collisionPlaneKillColor", m_settingsDefault.collisionPlaneKillColor);
+    m_settings.backgroundColor = loadVec4(settings, "backgroundColor", m_settingsDefault.backgroundColor);
     m_settings.maxParticles = settings.value("maxParticles", m_settingsDefault.maxParticles);
     m_settings.useFixedDsResolution = settings.value("useFixedDsResolution", m_settingsDefault.useFixedDsResolution);
     m_settings.fixedDsResolutionScale = settings.value("fixedDsResolutionScale", m_settingsDefault.fixedDsResolutionScale);
@@ -354,6 +355,7 @@ void Editor::saveConfig(nlohmann::json& config) const {
         { "editedEmitterColor", saveVec4(m_settings.editedEmitterColor) },
         { "collisionPlaneBounceColor", saveVec4(m_settings.collisionPlaneBounceColor) },
         { "collisionPlaneKillColor", saveVec4(m_settings.collisionPlaneKillColor) },
+        { "backgroundColor", saveVec4(m_settings.backgroundColor) },
         { "maxParticles", m_settings.maxParticles },
         { "useFixedDsResolution", m_settings.useFixedDsResolution },
         { "fixedDsResolutionScale", m_settings.fixedDsResolutionScale }
@@ -973,6 +975,7 @@ void Editor::renderSettings() {
         ImGui::ColorEdit4("Edited Emitter Color", glm::value_ptr(m_settings.editedEmitterColor));
         ImGui::ColorEdit4("Collision Plane Bounce Color", glm::value_ptr(m_settings.collisionPlaneBounceColor));
         ImGui::ColorEdit4("Collision Plane Kill Color", glm::value_ptr(m_settings.collisionPlaneKillColor));
+        ImGui::ColorEdit4("Background Color", glm::value_ptr(m_settings.backgroundColor));
 
         ImGui::SeparatorText("Rendering");
         bool changed = false;

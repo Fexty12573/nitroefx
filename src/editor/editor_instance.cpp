@@ -118,7 +118,8 @@ void EditorInstance::renderParticles(const std::vector<Renderer*>& renderers) {
 
     m_viewport.bind();
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    const auto clearColor = settings.backgroundColor;
+    glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     for (const auto renderer : renderers) {
