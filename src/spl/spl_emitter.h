@@ -10,13 +10,14 @@ class ParticleSystem;
 struct CameraParams;
 
 struct SPLEmitterState {
-    bool terminate;
+    bool terminate; // Kills the emitter and all of its particles
     bool emissionPaused;
     bool paused;
     bool renderingDisabled;
     bool started;
     bool looping;
-    bool frame1;
+    bool frame1; // Indicates if this is the first frame of the emitter's life
+    bool dead; // Stops the emitter from emitting new particles, but allows it to update existing ones
 };
 
 class SPLEmitter {

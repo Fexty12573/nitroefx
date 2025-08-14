@@ -18,7 +18,8 @@ SPLEmitter::SPLEmitter(const SPLResource* resource, ParticleSystem* system, bool
         .renderingDisabled = false,
         .started = false,
         .looping = looping,
-        .frame1 = true
+        .frame1 = true,
+        .dead = false
     };
 
     m_position = pos + resource->header.emitterBasePos;
@@ -96,12 +97,10 @@ void SPLEmitter::update(float deltaTime) {
 
     if (!m_state.terminate) {
         if (m_emissionInterval == 0.0f || m_state.frame1) { // Special handling for the first frame, where lifeTime == emissionInterval
-            spdlog::info("Frame 1 emission");
             emit((u32)header.emissionCount);
         } else {
             if (m_age <= header.emitterLifeTime) {
                 while (m_emissionTimer >= m_emissionInterval) {
-                    spdlog::info("Emitting {} particles, timer={}, interval={}", header.emissionCount, m_emissionTimer, m_emissionInterval);
                     emit((u32)header.emissionCount);
                     m_emissionTimer -= m_emissionInterval;
                 }
@@ -248,10 +247,14 @@ void SPLEmitter::update(float deltaTime) {
     m_emissionTimer += deltaTime;
     m_state.frame1 = false;
 
-    if (m_state.looping && m_age > header.emitterLifeTime) {
-        m_age = 0;
-        m_emissionTimer = 0;
-        m_state.frame1 = true;
+    if (m_age > header.emitterLifeTime) {
+        if (m_state.looping) {
+            m_age = 0;
+            m_emissionTimer = 0;
+            m_state.frame1 = true;
+        } else {
+            m_state.dead = true;
+        }
     }
 
     for (const auto ptcl : particlesToRemove) {
@@ -277,6 +280,10 @@ void SPLEmitter::render(const CameraParams& params) {
 }
 
 void SPLEmitter::emit(u32 count) {
+    if (m_state.dead) {
+        return;
+    }
+
     const auto& header = m_resource->header;
 
     switch (header.flags.emissionType) {
