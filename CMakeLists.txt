@@ -68,7 +68,7 @@ target_link_libraries(nitroefx PRIVATE
     OpenGL::GL
     GLEW::GLEW
     implot::implot
-    SPNG::spng_static
+    spng::spng_static
     libnarc_static
     ${IMAGEQUANT_LIB})
 
