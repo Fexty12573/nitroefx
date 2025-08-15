@@ -143,7 +143,6 @@ void ModernParticleRenderer::begin(const glm::mat4& view, const glm::mat4& proj)
     // so later particles are not rejected by the depth test.
     glCall(glEnable(GL_BLEND));
     glCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-    glCall(glDepthMask(GL_FALSE));
 }
 
 void ModernParticleRenderer::end() {
@@ -168,9 +167,6 @@ void ModernParticleRenderer::end() {
 
     glCall(glBindVertexArray(0));
     m_shader.unbind();
-
-    // Re-enable depth writes after transparent pass
-    glCall(glDepthMask(GL_TRUE));
 
     m_isRendering = false;
 }

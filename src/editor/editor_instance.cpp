@@ -138,7 +138,9 @@ void EditorInstance::renderParticles(const std::vector<Renderer*>& renderers) {
         renderer->render(m_camera.getView(), m_camera.getProj());
     }
 
+    glDepthMask(GL_FALSE);
     m_particleSystem.render(m_camera.getParams());
+    glDepthMask(GL_TRUE);
 
     m_viewport.unbind();
 }
