@@ -38,15 +38,16 @@ SPLSpinBehavior::SPLSpinBehavior(const SPLSpinBehaviorNative& native) : SPLBehav
 }
 
 void SPLSpinBehavior::apply(SPLParticle& particle, glm::vec3& acceleration, SPLEmitter& emitter, float dt) {
+    const auto adjustedAngle = angle * dt * SPLArchive::SPL_FRAMES_PER_SECOND;
     switch (axis) {
     case SPLSpinAxis::X:
-        particle.position = glm::rotate(glm::mat4(1), angle * dt, { 1, 0, 0 }) * glm::vec4(particle.position, 1);
+        particle.position = glm::rotate(glm::mat4(1), adjustedAngle, { 1, 0, 0 }) * glm::vec4(particle.position, 1);
         break;
     case SPLSpinAxis::Y:
-        particle.position = glm::rotate(glm::mat4(1), angle * dt, { 0, 1, 0 }) * glm::vec4(particle.position, 1);
+        particle.position = glm::rotate(glm::mat4(1), adjustedAngle, { 0, 1, 0 }) * glm::vec4(particle.position, 1);
         break;
     case SPLSpinAxis::Z:
-        particle.position = glm::rotate(glm::mat4(1), angle * dt, { 0, 0, 1 }) * glm::vec4(particle.position, 1);
+        particle.position = glm::rotate(glm::mat4(1), adjustedAngle, { 0, 0, 1 }) * glm::vec4(particle.position, 1);
         break;
     }
 }
@@ -79,5 +80,5 @@ void SPLCollisionPlaneBehavior::apply(SPLParticle& particle, glm::vec3& accelera
 }
 
 void SPLConvergenceBehavior::apply(SPLParticle& particle, glm::vec3& acceleration, SPLEmitter& emitter, float dt) {
-    particle.position += force * (target - particle.position) * dt;
+    particle.position += force * (target - particle.position) * dt * (f32)SPLArchive::SPL_FRAMES_PER_SECOND;
 }

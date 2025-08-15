@@ -1437,7 +1437,7 @@ bool Editor::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavio
         ImGui::PopStyleColor();
     }
 
-    NOTIFY(ImGui::DragFloat3("Magnitude", glm::value_ptr(gravity->magnitude)));
+    NOTIFY(ImGui::DragFloat3("Magnitude", glm::value_ptr(gravity->magnitude), 0.001f));
 
     ImGui::EndChild();
 
@@ -1458,7 +1458,7 @@ bool Editor::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>
         ImGui::PopStyleColor();
     }
 
-    NOTIFY(ImGui::DragFloat3("Magnitude", glm::value_ptr(random->magnitude)));
+    NOTIFY(ImGui::DragFloat3("Magnitude", glm::value_ptr(random->magnitude), 0.001f));
     NOTIFY(ImGui::SliderFloat("Apply Interval", &random->applyInterval, 0, 5, "%.3fs", ImGuiSliderFlags_Logarithmic));
 
     ImGui::EndChild();
