@@ -55,6 +55,7 @@ private:
     void renderBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
     void renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
     void renderPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
+    void renderDirectionalPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
 
 private:
     u32 m_maxInstances;
@@ -118,6 +119,7 @@ private:
     void renderBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
     void renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
     void renderPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
+    void renderDirectionalPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
 
 private:
     std::span<const SPLTexture> m_textures;

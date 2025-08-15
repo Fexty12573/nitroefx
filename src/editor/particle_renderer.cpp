@@ -346,6 +346,77 @@ void ModernParticleRenderer::renderPolygon(const SPLParticle& particle, const Ca
     submit(particle.texture, inst);
 }
 
+void ModernParticleRenderer::renderDirectionalPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto resource = particle.emitter->getResource();
+    const auto& hdr = resource->header;
+
+    glm::vec3 rotAxis;
+    if (hdr.flags.polygonRotAxis == SPLPolygonRotAxis::Y) {
+        rotAxis = { 0, 1, 0 };
+    } else if (hdr.flags.polygonRotAxis == SPLPolygonRotAxis::XYZ) {
+        rotAxis = { 1, 1, 1 };
+    }
+
+    glm::vec3 scale = { particle.baseScale * hdr.aspectRatio, particle.baseScale, 1.0f };
+
+    switch (hdr.misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale;
+        scale.y *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale;
+        break;
+    }
+
+    glm::vec3 facingDir = hdr.misc.dpolFaceEmitter
+        ? -glm::normalize(particle.position)
+        : glm::normalize(particle.velocity);
+
+    glm::vec3 axis(0, 1, 0);
+
+    const auto dot = glm::dot(facingDir, axis);
+    if (dot > 0.8f || dot < -0.8f) {
+        // Facing up or down, use XZ plane
+        axis = { 1, 0, 0 };
+    }
+
+    const auto dir1 = glm::cross(facingDir, axis);
+    const auto dir2 = glm::cross(facingDir, dir1);
+
+    glm::mat4 dirRot(
+        dir1.x, dir1.y, dir1.z, 0.0f,
+        facingDir.x, facingDir.y, facingDir.z, 0.0f,
+        dir2.x, dir2.y, dir2.z, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    );
+
+    glm::mat4 rot = glm::rotate(glm::mat4(1), particle.rotation, rotAxis) * dirRot;
+    if (hdr.flags.polygonReferencePlane == 1) { // XZ plane
+        rot = glm::rotate(rot, glm::half_pi<f32>(), { 1, 0, 0 });
+    }
+
+    const auto pos = particle.emitterPos + particle.position;
+    const auto transform = glm::translate(glm::mat4(1), pos)
+        * rot
+        * glm::scale(glm::mat4(1), scale);
+
+    const auto color = glm::mix(particle.color, hdr.color, 0.5f);
+
+    ParticleInstance inst{};
+    inst.color = glm::vec4(color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+    inst.transform = transform;
+    inst.texCoords[0] = { 0, t };
+    inst.texCoords[1] = { s, t };
+    inst.texCoords[2] = { s, 0 };
+    inst.texCoords[3] = { 0, 0 };
+
+    submit(particle.texture, inst);
+}
+
 void ModernParticleRenderer::setTextures(std::span<const SPLTexture> textures) {
     if (m_isRendering) {
         throw std::runtime_error("Cannot set textures while rendering");
@@ -384,6 +455,8 @@ void ModernParticleRenderer::renderParticle(const SPLParticle& particle, const C
         renderPolygon(particle, params, s, t);
         break;
     case SPLDrawType::DirectionalPolygon:
+        renderDirectionalPolygon(particle, params, s, t);
+        break;
     case SPLDrawType::DirectionalPolygonCenter:
         // Not yet implemented in either backend
         break;
@@ -427,6 +500,9 @@ void LegacyParticleRenderer::renderParticle(const SPLParticle& particle, const C
         break;
     case SPLDrawType::Polygon:
         renderPolygon(particle, params, s, t);
+        break;
+    case SPLDrawType::DirectionalPolygon:
+        renderDirectionalPolygon(particle, params, s, t);
         break;
     }
 }
@@ -691,6 +767,72 @@ void LegacyParticleRenderer::renderPolygon(const SPLParticle& particle, const Ca
     const auto pos = particle.emitterPos + particle.position;
 
     const glm::mat4 transform = glm::translate(glm::mat4(1), pos)
+        * rot
+        * glm::scale(glm::mat4(1), scale);
+
+    const auto color = glm::mix(particle.color, hdr.color, 0.5f);
+
+    glCall(glMatrixMode(GL_MODELVIEW));
+    glCall(glPushMatrix());
+    glCall(glMultMatrixf(glm::value_ptr(transform)));
+    glCall(glColor4f(color.r, color.g, color.b, particle.visibility.baseAlpha * particle.visibility.animAlpha));
+
+    if (hdr.flags.polygonReferencePlane == 1) { // XZ plane
+        drawXZPlane(s, t, hdr.polygonX, hdr.polygonY);
+    } else {
+        drawXYPlane(s, t, hdr.polygonX, hdr.polygonY);
+    }
+
+    glCall(glPopMatrix());
+}
+
+void LegacyParticleRenderer::renderDirectionalPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto resource = particle.emitter->getResource();
+    const auto& hdr = resource->header;
+
+    glm::mat4 rot = rotate(hdr.flags.polygonRotAxis, glm::sin(particle.rotation), glm::cos(particle.rotation));
+
+    glm::vec3 scale = { particle.baseScale * hdr.aspectRatio, particle.baseScale, 1.0f };
+
+    switch (hdr.misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale;
+        scale.y *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale;
+        break;
+    }
+
+    glm::vec3 facingDir = hdr.misc.dpolFaceEmitter
+        ? -glm::normalize(particle.position)
+        : glm::normalize(particle.velocity);
+
+    glm::vec3 axis(0, 1, 0);
+
+    const auto dot = glm::dot(facingDir, axis);
+    if (dot > 0.8f || dot < -0.8f) {
+        // Facing up or down, use XZ plane
+        axis = { 1, 0, 0 };
+    }
+
+    const auto dir1 = glm::cross(facingDir, axis);
+    const auto dir2 = glm::cross(facingDir, dir1);
+
+    glm::mat4 dirRot(
+        dir1.x, dir1.y, dir1.z, 0.0f,
+        facingDir.x, facingDir.y, facingDir.z, 0.0f,
+        dir2.x, dir2.y, dir2.z, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    );
+
+    rot = rot * dirRot;
+
+    const auto pos = particle.emitterPos + particle.position;
+    const auto transform = glm::translate(glm::mat4(1), pos)
         * rot
         * glm::scale(glm::mat4(1), scale);
 
