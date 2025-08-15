@@ -222,7 +222,8 @@ void ModernParticleRenderer::renderBillboard(const SPLParticle& particle, const 
 
 void ModernParticleRenderer::renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
     const auto* resource = particle.emitter->getResource();
-    glm::vec3 scale = { particle.baseScale * resource->header.aspectRatio, particle.baseScale, 1 };
+    const auto& hdr = resource->header;
+    glm::vec3 scale = { particle.baseScale * hdr.aspectRatio, particle.baseScale, 1 };
 
     switch (resource->header.misc.scaleAnimDir) {
     case SPLScaleAnimDir::XY:
@@ -273,24 +274,27 @@ void ModernParticleRenderer::renderDirectionalBillboard(const SPLParticle& parti
     const glm::vec3 vhat = glm::length2(v) > 0.0f ? glm::normalize(v) : glm::vec3(0.0f, 0.0f, 0.0f);
 
     const f32 dot = std::abs(glm::dot(vhat, -f));
-    const f32 dotScale = scale.y * (1.0f + (1.0f - dot) * resource->header.misc.dbbScale);
+    const f32 dotScale = scale.y * (1.0f + (1.0f - dot) * hdr.misc.dbbScale);
 
-    glm::mat4 transform(1.0f);
-    transform[0] = glm::vec4(d * scale.x, 0.0f);
-    transform[1] = glm::vec4(y * dotScale, 0.0f);
-    transform[2] = glm::vec4(f, 0.0f);
-    transform[3] = glm::vec4(particle.emitterPos + particle.position, 1.0f);
+    glm::mat4 mtx(1.0f);
+    mtx[0] = glm::vec4(d * scale.x, 0.0f);
+    mtx[1] = glm::vec4(y * dotScale, 0.0f);
+    mtx[2] = glm::vec4(f, 0.0f);
+    mtx[3] = glm::vec4(particle.emitterPos + particle.position, 1.0f);
+
+    // Apply local-space polygon offset like the legacy path (drawXYPlane with x/y)
+    const glm::mat4 localOffset = glm::translate(glm::mat4(1.0f), glm::vec3(hdr.polygonX, hdr.polygonY, 0.0f));
 
     ParticleInstance inst{};
     inst.color = glm::vec4(
-        glm::mix(particle.color, resource->header.color, 0.5f),
+        glm::mix(particle.color, hdr.color, 0.5f),
         particle.visibility.baseAlpha * particle.visibility.animAlpha
     );
-    inst.transform = transform;
-    inst.texCoords[0] = { 0, 0 };
-    inst.texCoords[1] = { s, 0 };
-    inst.texCoords[2] = { s, t };
-    inst.texCoords[3] = { 0, t };
+    inst.transform = mtx * localOffset;
+    inst.texCoords[0] = { 0, t };
+    inst.texCoords[1] = { s, t };
+    inst.texCoords[2] = { s, 0 };
+    inst.texCoords[3] = { 0, 0 };
 
     submit(particle.texture, inst);
 }
