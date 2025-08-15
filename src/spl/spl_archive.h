@@ -20,7 +20,11 @@ enum {
 class SPLArchive {
 public:
     explicit SPLArchive(const std::filesystem::path& filename);
+    explicit SPLArchive(std::span<const char> data);
     SPLArchive();
+
+    static bool isValid(const std::filesystem::path& filename);
+    static bool isValid(std::span<const char> data);
 
     const SPLResource& getResource(size_t index) const { return m_resources[index]; }
     SPLResource& getResource(size_t index) { return m_resources[index]; }
@@ -46,6 +50,7 @@ public:
     size_t getTextureCount() const { return m_textures.size(); }
 
     void save(const std::filesystem::path& filename);
+    void save(std::vector<u8> data) const;
     void exportTextures(const std::filesystem::path& directory, const std::filesystem::path& backupDir = {}) const;
     void exportTexture(size_t index, const std::filesystem::path& file) const;
 
@@ -54,7 +59,8 @@ public:
     static constexpr u32 SPL_FRAMES_PER_SECOND = 30;
 
 private:
-    void load(const std::filesystem::path& filename);
+    void load(std::istream& stream);
+    static bool isValid(std::istream& stream);
 
     static SPLResourceHeader fromNative(const SPLResourceHeaderNative& native);
 

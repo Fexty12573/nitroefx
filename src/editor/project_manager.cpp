@@ -3,8 +3,10 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
-#include "SDL3/SDL_messagebox.h"
+#include <SDL3/SDL_messagebox.h>
 #include <spdlog/spdlog.h>
+#include <narc/narc.h>
+#include <narc/defs/fimg.h>
 
 #include "imgui/extensions.h"
 #include "fonts/IconsFontAwesome6.h"
@@ -61,6 +63,11 @@ void ProjectManager::openEditor(const std::filesystem::path& path) {
         return;
     }
 
+    if (!SPLArchive::isValid(path)) {
+       spdlog::error("Invalid SPL archive: {}", path.string());
+       return;
+    }
+
     const auto editor = std::make_shared<EditorInstance>(path);
     if (m_openEditors.empty()) {
         m_activeEditor = editor;
@@ -86,10 +93,29 @@ void ProjectManager::openTempEditor(const std::filesystem::path& path) {
         return;
     }
 
+    if (!SPLArchive::isValid(path)) {
+        spdlog::error("Invalid SPL archive: {}", path.string());
+        return;
+    }
+
     closeTempEditor();
     const auto editor = std::make_shared<EditorInstance>(path, true);
     m_openEditors.push_back(editor);
     m_activeEditor = editor;
+}
+
+void ProjectManager::openNarcProject(const std::filesystem::path& path) {
+    narc_error err = narc_load(path.string().c_str(), &m_narc, &m_vfsCtx);
+    if (err != NARCERR_NONE) {
+        spdlog::error("Failed to load NARC archive: {} (error: {})", path.string(), narc_strerror(err));
+        return;
+    }
+
+    m_fatbMeta = (fatb_meta*)(m_narc->vfs + m_vfsCtx.fatb_ofs);
+    m_fatb = (fatb_entry*)(m_narc->vfs + m_vfsCtx.fatb_ofs + sizeof(*m_fatbMeta));
+    m_fimg = (char*)(m_narc->vfs + m_vfsCtx.fimg_ofs + sizeof(fimg_meta));
+
+    m_isNarc = true;
 }
 
 void ProjectManager::closeEditor(const std::shared_ptr<EditorInstance>& editor, bool force) {
@@ -140,7 +166,7 @@ void ProjectManager::render() {
     }
 
     if (ImGui::Begin("Project Manager##ProjectManager", &m_open)) {
-        if (m_projectPath.empty()) {
+        if (m_projectPath.empty() && !m_narc) {
             ImGui::Text("No project open");
         } else {
             if (ImGui::CollapsingHeader("Settings")) {
@@ -152,12 +178,21 @@ void ProjectManager::render() {
 
             ImGui::BeginChild("##ProjectManagerFiles", {}, ImGuiChildFlags_Border);
 
-            for (const auto& entry : std::filesystem::directory_iterator(m_projectPath)) {
-                if (entry.is_directory()) {
-                    renderDirectory(entry.path());
-                } else {
-                    if (m_searchString.empty() || entry.path().filename().string().contains(m_searchString)) {
-                        renderFile(entry.path());
+            if (m_isNarc) {
+                for (size_t i = 0; i < m_fatbMeta->num_files; i++) {
+                    const auto name = fmt::format("{}{}", i, narc_files_getext(m_fimg + m_fatb[i].start));
+                    if (m_searchString.empty() || name.contains(m_searchString)) {
+                        renderNarcFile(name, i);
+                    }
+                }
+            } else {
+                for (const auto& entry : std::filesystem::directory_iterator(m_projectPath)) {
+                    if (entry.is_directory()) {
+                        renderDirectory(entry.path());
+                    } else {
+                        if (m_searchString.empty() || entry.path().filename().string().contains(m_searchString)) {
+                            renderFile(entry.path());
+                        }
                     }
                 }
             }
@@ -182,6 +217,41 @@ void ProjectManager::handleEvent(const SDL_Event& event) {
     default:
         break;
     }
+}
+
+void ProjectManager::openEditor(size_t narcIndex) {
+    const auto existing = getNarcEditor(narcIndex);
+    if (existing) {
+        m_activeEditor = existing;
+        m_forceActivate = true;
+        existing->makePermanent();
+        return;
+    }
+
+    const auto& fatb = m_fatb[narcIndex];
+    const std::span data(m_fimg + fatb.start, fatb.end - fatb.start);
+    const auto editor = std::make_shared<EditorInstance>(narcIndex, data);
+
+    m_activeEditor = editor;
+    m_openEditors.push_back(editor);
+}
+
+void ProjectManager::openTempEditor(size_t narcIndex) {
+    const auto existing = getNarcEditor(narcIndex);
+    if (existing) {
+        m_activeEditor = existing;
+        m_forceActivate = true;
+        existing->makePermanent();
+        return;
+    }
+
+    const auto& fatb = m_fatb[narcIndex];
+    const std::span data(m_fimg + fatb.start, fatb.end - fatb.start);
+    closeTempEditor();
+
+    const auto editor = std::make_shared<EditorInstance>(narcIndex, data, true);
+    m_openEditors.push_back(editor);
+    m_activeEditor = editor;
 }
 
 void ProjectManager::renderDirectory(const std::filesystem::path& path) {
@@ -252,6 +322,52 @@ void ProjectManager::renderFile(const std::filesystem::path& path) {
         if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete")) {
             spdlog::info("Deleting file: {}", path.string());
             std::filesystem::remove(path);
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void ProjectManager::renderNarcFile(const std::string& name, size_t index) {
+    if (index >= m_fatbMeta->num_files) {
+        spdlog::error("Invalid NARC file index: {}", index);
+        return;
+    }
+
+    const auto& fatb = m_fatb[index];
+    const char* data = m_fimg + fatb.start;
+    const auto isSplFile = SPLArchive::isValid(std::span(data, fatb.end - fatb.start));
+
+    if (!isSplFile) {
+        if (m_hideOtherFiles) {
+            return;
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    }
+
+    ImGui::Indent(40.0f);
+    if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
+        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            openEditor(index);
+        } else {
+            openTempEditor(index);
+        }
+    }
+    ImGui::Unindent(40.0f);
+
+    if (!isSplFile) {
+        ImGui::PopStyleColor();
+        return;
+    }
+
+    if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight)) {
+        if (ImGui::MenuItemIcon(ICON_FA_FILE_IMPORT, "Open")) {
+            openEditor(index);
+        }
+
+        if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, 0, false)) {
+            spdlog::warn("Deleting NARC files not supported");
         }
 
         ImGui::EndPopup();

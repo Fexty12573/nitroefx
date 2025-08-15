@@ -232,7 +232,7 @@ int Application::runCli(argparse::ArgumentParser &cli) {
         const auto output = cli.get<std::string>("--output");
         const auto indices = cli.get<std::vector<int>>("--index");
 
-        SPLArchive archive(cli.get<std::string>("path"));
+        SPLArchive archive(std::filesystem::path(cli.get<std::string>("path")));
     }
 
     return 0;
@@ -464,11 +464,8 @@ void Application::renderMenuBar() {
                 }
 
                 if (ImGui::MenuItemIcon(ICON_FA_FILE, "SPL File", KEYBINDSTR(OpenFile))) {
-                    const auto path = openFile();
-                    if (!path.empty()) {
-                        addRecentFile(path);
-                        g_projectManager->openEditor(path);
-                    }
+                    const std::filesystem::path filePath = openFile();
+                    tryOpenEditor(filePath);
                 }
 
                 ImGui::EndMenu();
@@ -493,7 +490,7 @@ void Application::renderMenuBar() {
 
                 for (const auto& path : m_recentFiles) {
                     if (ImGui::MenuItem(path.c_str())) {
-                        g_projectManager->openEditor(path);
+                        tryOpenEditor(path);
                     }
                 }
 
@@ -1017,11 +1014,8 @@ void Application::executeAction(u32 action) {
         }
     } break;
     case ApplicationAction::OpenFile: {
-        const auto filePath = openFile();
-        if (!filePath.empty()) {
-            addRecentFile(filePath);
-            g_projectManager->openEditor(filePath);
-        }
+        const std::filesystem::path filePath = openFile();
+        tryOpenEditor(filePath);
     } break;
     case ApplicationAction::Save:
         m_editor->save();
@@ -1170,6 +1164,18 @@ void Application::addRecentProject(const std::string& path) {
     saveConfig();
 }
 
+void Application::tryOpenEditor(const std::filesystem::path& path) {
+    if (!path.empty()) {
+        addRecentFile(path.string());
+        const auto extension = path.extension();
+        if (extension == ".spa" || extension == ".bin") {
+            g_projectManager->openEditor(path);
+        } else if (extension == ".narc" || extension == ".arc") {
+            g_projectManager->openNarcProject(path);
+        }
+    }
+}
+
 std::filesystem::path Application::getConfigPath() {
 #ifdef _WIN32
     char* buffer;
@@ -1204,13 +1210,13 @@ std::filesystem::path Application::getTempPath() {
 }
 
 std::string Application::openFile() {
-    const char* filters[] = { "*.spa" };
+    const char* filters[] = { "*.spa", "*.bin", "*.narc" };
     const char* result = tinyfd_openFileDialog(
         "Open File", 
         "", 
-        1, 
+        3, 
         filters, 
-        "SPL Files", 
+        "SPL/NARC Files", 
         false
     );
 

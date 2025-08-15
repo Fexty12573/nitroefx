@@ -15,6 +15,7 @@
 class EditorInstance {
 public:
     explicit EditorInstance(const std::filesystem::path& path, bool isTemp = false);
+    explicit EditorInstance(size_t narcIndex, std::span<const char> data, bool isTemp = false);
     EditorInstance(bool isTemp = false);
 
     std::pair<bool, bool> render();
@@ -68,6 +69,10 @@ public:
         return m_path;
     }
 
+    size_t getNarcIndex() const {
+        return m_narcIndex;
+    }
+
     SPLArchive& getArchive() {
         return m_archive;
     }
@@ -90,6 +95,7 @@ public:
 
 private:
     std::filesystem::path m_path;
+    size_t m_narcIndex = -1;
     SPLArchive m_archive;
     GLViewport m_viewport = GLViewport({ 800, 600 });
     ParticleSystem m_particleSystem;

@@ -9,6 +9,8 @@
 #include <fstream>
 #include <concepts>
 #include <ranges>
+#include <span>
+#include <spanstream>
 
 #include "spl_random.h"
 
@@ -55,7 +57,13 @@ void writePngRgba(const SPLTexture& texture, const std::filesystem::path& file);
 
 
 SPLArchive::SPLArchive(const std::filesystem::path& filename) : m_header() {
-    load(filename);
+    std::ifstream stream(filename, std::ios::binary | std::ios::in);
+    load(stream);
+}
+
+SPLArchive::SPLArchive(std::span<const char> data) {
+    std::ispanstream stream(data);
+    load(stream);
 }
 
 SPLArchive::SPLArchive() {
@@ -95,14 +103,26 @@ SPLArchive::SPLArchive() {
     m_textures.push_back(defaultTexture);
 }
 
-void SPLArchive::load(const std::filesystem::path& filename) {
-    std::ifstream file(filename, std::ios::binary | std::ios::in);
-    if (!file) {
-        spdlog::error("Failed to open file: {}", filename.string());
-        return;
+bool SPLArchive::isValid(const std::filesystem::path& filename) {
+    if (!std::filesystem::exists(filename)) {
+        return false;
     }
 
-    file >> m_header;
+    std::ifstream file(filename, std::ios::binary | std::ios::in);
+    if (!file) {
+        return false;
+    }
+
+    return isValid(file);
+}
+
+bool SPLArchive::isValid(std::span<const char> data) {
+    std::ispanstream stream(data);
+    return isValid(stream);
+}
+
+void SPLArchive::load(std::istream& stream) {
+    stream >> m_header;
 
     if (m_header.magic != SPA_MAGIC) {
         spdlog::error("Invalid SPL archive magic: {}", m_header.magic);
@@ -115,7 +135,7 @@ void SPLArchive::load(const std::filesystem::path& filename) {
         SPLResource& res = m_resources[i];
 
         SPLResourceHeaderNative header;
-        file >> header;
+        stream >> header;
 
         res.header = fromNative(header);
         const auto& flags = res.header.flags;
@@ -123,68 +143,68 @@ void SPLArchive::load(const std::filesystem::path& filename) {
         // Animations
         if (flags.hasScaleAnim) {
             SPLScaleAnimNative scaleAnim;
-            file >> scaleAnim;
+            stream >> scaleAnim;
             res.scaleAnim = fromNative(scaleAnim);
         }
 
         if (flags.hasColorAnim) {
             SPLColorAnimNative colorAnim;
-            file >> colorAnim;
+            stream >> colorAnim;
             res.colorAnim = fromNative(colorAnim);
         }
 
         if (flags.hasAlphaAnim) {
             SPLAlphaAnimNative alphaAnim;
-            file >> alphaAnim;
+            stream >> alphaAnim;
             res.alphaAnim = fromNative(alphaAnim);
         }
 
         if (flags.hasTexAnim) {
             SPLTexAnimNative texAnim;
-            file >> texAnim;
+            stream >> texAnim;
             res.texAnim = fromNative(texAnim);
         }
 
         if (flags.hasChildResource) {
             SPLChildResourceNative childResource;
-            file >> childResource;
+            stream >> childResource;
             res.childResource = fromNative(childResource);
         }
 
         // Behaviors
         if (flags.hasGravityBehavior) {
             SPLGravityBehaviorNative gravityBehavior;
-            file >> gravityBehavior;
+            stream >> gravityBehavior;
             res.behaviors.push_back(fromNative(gravityBehavior));
         }
 
         if (flags.hasRandomBehavior) {
             SPLRandomBehaviorNative randomBehavior;
-            file >> randomBehavior;
+            stream >> randomBehavior;
             res.behaviors.push_back(fromNative(randomBehavior));
         }
 
         if (flags.hasMagnetBehavior) {
             SPLMagnetBehaviorNative magnetBehavior;
-            file >> magnetBehavior;
+            stream >> magnetBehavior;
             res.behaviors.push_back(fromNative(magnetBehavior));
         }
 
         if (flags.hasSpinBehavior) {
             SPLSpinBehaviorNative spinBehavior;
-            file >> spinBehavior;
+            stream >> spinBehavior;
             res.behaviors.push_back(fromNative(spinBehavior));
         }
 
         if (flags.hasCollisionPlaneBehavior) {
             SPLCollisionPlaneBehaviorNative collisionPlaneBehavior;
-            file >> collisionPlaneBehavior;
+            stream >> collisionPlaneBehavior;
             res.behaviors.push_back(fromNative(collisionPlaneBehavior));
         }
 
         if (flags.hasConvergenceBehavior) {
             SPLConvergenceBehaviorNative convergenceBehavior;
-            file >> convergenceBehavior;
+            stream >> convergenceBehavior;
             res.behaviors.push_back(fromNative(convergenceBehavior));
         }
     }
@@ -195,8 +215,8 @@ void SPLArchive::load(const std::filesystem::path& filename) {
         SPLTexture& tex = m_textures[i];
 
         SPLTextureResource texRes;
-        s64 offset = file.tellg();
-        file >> texRes;
+        s64 offset = stream.tellg();
+        stream >> texRes;
 
         if (texRes.magic != SPT_MAGIC) {
             spdlog::error("Invalid texture resource magic: {}", texRes.magic);
@@ -211,13 +231,13 @@ void SPLArchive::load(const std::filesystem::path& filename) {
         if (!texRes.param.useSharedTexture) { // Handle shared textures later
             if (texRes.textureSize > 0) {
                 m_textureData.emplace_back(texRes.textureSize);
-                file.read((char*)m_textureData.back().data(), texRes.textureSize);
+                stream.read((char*)m_textureData.back().data(), texRes.textureSize);
             }
 
             if (texRes.textureSize > 0) {
                 m_paletteData.emplace_back(texRes.paletteSize);
-                file.seekg(offset + texRes.paletteOffset, std::ios::beg);
-                file.read((char*)m_paletteData.back().data(), texRes.paletteSize);
+                stream.seekg(offset + texRes.paletteOffset, std::ios::beg);
+                stream.read((char*)m_paletteData.back().data(), texRes.paletteSize);
             } else {
                 // No palette data (TextureFormat::Direct)
                 m_paletteData.emplace_back();
@@ -229,7 +249,7 @@ void SPLArchive::load(const std::filesystem::path& filename) {
             tex.glTexture = std::make_shared<GLTexture>(tex);
         }
 
-        file.seekg(offset + texRes.resourceSize, std::ios::beg);
+        stream.seekg(offset + texRes.resourceSize, std::ios::beg);
     }
 
     // Resolve shared textures
@@ -240,6 +260,12 @@ void SPLArchive::load(const std::filesystem::path& filename) {
             tex.glTexture = m_textures[tex.param.sharedTexID].glTexture;
         }
     }
+}
+
+bool SPLArchive::isValid(std::istream& stream) {
+    decltype(SPA_MAGIC) magic;
+    stream >> magic;
+    return magic == SPA_MAGIC;
 }
 
 void SPLArchive::save(const std::filesystem::path& filename) {

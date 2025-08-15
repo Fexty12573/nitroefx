@@ -15,6 +15,7 @@ EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp)
     : m_path(path), m_archive(path)
     , m_particleSystem(g_application->getEditor()->getSettings().maxParticles, m_archive.getTextures())
     , m_camera(glm::radians(45.0f), { 800, 800 }, 1.0f, 500.0f), m_isTemp(isTemp) {
+
     m_uniqueID = SPLRandom::nextU64();
     m_updateProj = true;
     notifyResourceChanged(0);
@@ -29,6 +30,28 @@ EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp)
         g_application->getEditor()->getSettings().useOrthographicCamera
             ? CameraProjection::Orthographic
             : CameraProjection::Perspective
+    );
+}
+
+EditorInstance::EditorInstance(size_t narcIndex, std::span<const char> data, bool isTemp)
+    : m_narcIndex(narcIndex), m_archive(data)
+    , m_particleSystem(g_application->getEditor()->getSettings().maxParticles, m_archive.getTextures())
+    , m_camera(glm::radians(45.0f), {800, 800}, 1.0f, 500.0f), m_isTemp(isTemp) {
+
+    m_uniqueID = SPLRandom::nextU64();
+    m_updateProj = true;
+    notifyResourceChanged(0);
+
+    // Choose particle renderer backend
+    if (g_application->getEditor()->getSettings().useLegacyParticleRenderer) {
+        m_particleSystem.useLegacyRenderer();
+        m_particleSystem.getRenderer().setTextures(m_archive.getTextures());
+    }
+
+    m_camera.setProjection(
+        g_application->getEditor()->getSettings().useOrthographicCamera
+        ? CameraProjection::Orthographic
+        : CameraProjection::Perspective
     );
 }
 
@@ -263,6 +286,11 @@ void EditorInstance::addResource() {
 }
 
 void EditorInstance::save() {
+    if (m_narcIndex != -1) {
+        spdlog::error("Saving NARC editors not supported yet");
+        return;
+    }
+
     if (m_path.empty()) {
         const auto file = Application::saveFile();
         if (!file.empty()) {
@@ -276,6 +304,7 @@ void EditorInstance::save() {
 
 void EditorInstance::saveAs(const std::filesystem::path& path) {
     m_path = path;
+    m_narcIndex = -1; // Reset NARC index since we're saving to a new file
     return save();
 }
 
@@ -298,6 +327,10 @@ EditorActionType EditorInstance::redo() {
 }
 
 std::string EditorInstance::getName() const {
+    if (m_narcIndex != -1) {
+        return fmt::format("N{:05d}.spa", m_narcIndex);
+    }
+
     if (m_path.empty()) {
         return "Untitled-" + std::to_string(m_uniqueID & 0xFF);
     }

@@ -53,6 +53,8 @@ private:
     void addRecentFile(const std::string& path);
     void addRecentProject(const std::string& path);
 
+    void tryOpenEditor(const std::filesystem::path& path);
+
     // Initialize a default docking layout if no ImGui ini file exists
     void initDefaultDockingLayout();
 
