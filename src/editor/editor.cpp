@@ -766,37 +766,37 @@ void Editor::renderTextureManager() {
                 ImGui::TableNextColumn(); ImGui::Text("Unique Alphas");
                 ImGui::TableNextColumn(); ImGui::Text("%" PRIu64, m_tempTexture->suggestedSpec.uniqueAlphas.size());
 
-            const auto estimatedSize = m_tempTexture->suggestedSpec.getSizeEstimate(m_tempTexture->width, m_tempTexture->height);
+                const auto estimatedSize = m_tempTexture->suggestedSpec.getSizeEstimate(m_tempTexture->width, m_tempTexture->height);
                 ImGui::TableNextColumn(); ImGui::Text("Estimated Size");
                 ImGui::TableNextColumn();
-            if (estimatedSize >= 1024) {
-                    ImGui::Text("%zu kB", estimatedSize / 1024);
-            } else {
-                    ImGui::Text("%zu B", estimatedSize);
-            }
+                if (estimatedSize >= 1024) {
+                        ImGui::Text("%zu kB", estimatedSize / 1024);
+                } else {
+                        ImGui::Text("%zu B", estimatedSize);
+                }
 
                 ImGui::TableNextColumn(); ImGui::Text("Format");
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(tableSize.x * 0.5f - style.CellPadding.x * 2);
                 if (ImGui::BeginCombo("##Format", getTextureFormat(m_tempTexture->suggestedSpec.format))) {
-                for (auto i = (int)TextureFormat::A3I5; i < (int)TextureFormat::Count; i++) {
-                    const auto flags = (TextureFormat)i == TextureFormat::Comp4x4 ? ImGuiSelectableFlags_Disabled : 0;
-                    if (ImGui::Selectable(getTextureFormat((TextureFormat)i), (int)m_tempTexture->suggestedSpec.format == i, flags)) {
-                        m_tempTexture->suggestedSpec.setFormat((TextureFormat)i);
-                        quantizeTexture(
-                            m_tempTexture->data,
-                            m_tempTexture->width,
-                            m_tempTexture->height,
-                            m_tempTexture->suggestedSpec,
-                            m_tempTexture->quantized
-                        );
+                    for (auto i = (int)TextureFormat::A3I5; i < (int)TextureFormat::Count; i++) {
+                        const auto flags = (TextureFormat)i == TextureFormat::Comp4x4 ? ImGuiSelectableFlags_Disabled : 0;
+                        if (ImGui::Selectable(getTextureFormat((TextureFormat)i), (int)m_tempTexture->suggestedSpec.format == i, flags)) {
+                            m_tempTexture->suggestedSpec.setFormat((TextureFormat)i);
+                            quantizeTexture(
+                                m_tempTexture->data,
+                                m_tempTexture->width,
+                                m_tempTexture->height,
+                                m_tempTexture->suggestedSpec,
+                                m_tempTexture->quantized
+                            );
 
-                        m_tempTexture->texture->update(m_tempTexture->quantized);
+                            m_tempTexture->texture->update(m_tempTexture->quantized);
+                        }
                     }
-                }
 
-                ImGui::EndCombo();
-            }
+                    ImGui::EndCombo();
+                }
 
                 ImGui::TableNextColumn(); ImGui::Text("Color Compression");
                 ImGui::TableNextColumn(); ImGui::Text("%s", m_tempTexture->suggestedSpec.requiresColorCompression ? "Yes" : "No");
@@ -856,7 +856,7 @@ void Editor::renderTextureManager() {
 
             const auto texCount = archive.getTextureCount();
             if (texCount <= 1) {
-                ImGui::TextColored({ 0.93f, 0.2, 0.2, 1 }, "You cannot delete the last texture.");
+                ImGui::TextColored({ 0.93f, 0.2f, 0.2f, 1 }, "You cannot delete the last texture.");
                 ImGui::BeginDisabled();
             }
 
@@ -2402,19 +2402,18 @@ void Editor::openTempTexture(const std::filesystem::path& path, size_t destIndex
             .uniqueAlphas = {},
             .flags = TextureAttributes::None,
         };
-
-        tempTex->texture->update(tempTex->data);
     } else {
         tempTex->preference = TextureConversionPreference::ColorDepth;
         tempTex->suggestedSpec = SPLTexture::suggestSpecification(tempTex->width, tempTex->height, tempTex->channels, tempTex->data, tempTex->preference);
 
         if (tempTex->suggestedSpec.requiresColorCompression || tempTex->suggestedSpec.requiresAlphaCompression) {
             quantizeTexture(tempTex->data, tempTex->width, tempTex->height, tempTex->suggestedSpec, tempTex->quantized);
-            tempTex->texture->update(tempTex->quantized);
         } else {
-            tempTex->texture->update(tempTex->data);
+            std::memcpy(tempTex->quantized, tempTex->data, (size_t)tempTex->width * tempTex->height * 4);
         }
     }
+
+    tempTex->texture->update(tempTex->quantized);
 
     tempTex->isValidSize = true;
 
