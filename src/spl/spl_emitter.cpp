@@ -1,6 +1,7 @@
 #include "spl_emitter.h"
 #include "editor/particle_system.h"
 #include "editor/camera.h"
+#include "spl_archive.h"
 #include "spl_random.h"
 
 #include <glm/gtc/random.hpp>
@@ -171,12 +172,14 @@ void SPLEmitter::update(float deltaTime) {
             behavior->apply(*ptcl, acc, *this, deltaTime);
         }
 
-        ptcl->rotation += ptcl->angularVelocity * deltaTime;
+        constexpr f32 fps = SPLArchive::SPL_FRAMES_PER_SECOND;
 
-        ptcl->velocity *= header.misc.airResistance;
-        ptcl->velocity += acc * deltaTime;
+        ptcl->rotation += ptcl->angularVelocity * deltaTime * fps;
 
-        ptcl->position += (ptcl->velocity + m_velocity) * deltaTime;
+        ptcl->velocity *= glm::pow(header.misc.airResistance, deltaTime * fps);
+        ptcl->velocity += acc * deltaTime * fps;
+
+        ptcl->position += (ptcl->velocity + m_velocity) * deltaTime * fps;
 
         if (header.flags.hasChildResource && m_resource->childResource) {
             const auto& child = m_resource->childResource.value();
@@ -227,12 +230,14 @@ void SPLEmitter::update(float deltaTime) {
                 }
             }
 
-            ptcl->rotation += ptcl->angularVelocity * deltaTime;
+            constexpr f32 fps = SPLArchive::SPL_FRAMES_PER_SECOND;
 
-            ptcl->velocity *= header.misc.airResistance;
-            ptcl->velocity += acc * deltaTime;
+            ptcl->rotation += ptcl->angularVelocity * deltaTime * fps;
 
-            ptcl->position += (ptcl->velocity + m_velocity) * deltaTime;
+            ptcl->velocity *= glm::pow(header.misc.airResistance, deltaTime * fps);
+            ptcl->velocity += acc * deltaTime * fps;
+
+            ptcl->position += (ptcl->velocity + m_velocity) * deltaTime * fps;
 
             ptcl->age += deltaTime;
             ptcl->emissionTimer += deltaTime;
@@ -344,8 +349,10 @@ void SPLEmitter::emit(u32 count) {
         } break;
 
         case SPLEmissionType::CylinderSurface: {
+            ptcl->velocity = glm::vec3(glm::circularRand(nonzero(header.radius)), 0.0f);
             ptcl->position = tiltCoordinates({
-                glm::circularRand(nonzero(header.radius)),
+                ptcl->velocity.x,
+                ptcl->velocity.y,
                 glm::linearRand(-header.length, header.length),
             });
         } break;

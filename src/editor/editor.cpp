@@ -206,14 +206,29 @@ void Editor::renderMenu(std::string_view name) {
 }
 
 void Editor::renderToolbar(float itemHeight) {
+    ImGui::VerticalSeparator(itemHeight);
+
     constexpr float framePadding = 2.0f;
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { framePadding, framePadding });
     ImGui::PushStyleColor(ImGuiCol_Header, m_settings.useFixedDsResolution ? IM_COL32(79, 79, 79, 200) : 0);
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(79, 79, 79, 200));
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(90, 90, 90, 255));
 
-    const ImVec2 size = { ImGui::CalcTextSize("DS Resolution").x + 2.0f * framePadding, itemHeight };
+    ImVec2 size = { ImGui::CalcTextSize("DS Resolution").x + 2.0f * framePadding, itemHeight };
     ImGui::Selectable("DS Resolution", &m_settings.useFixedDsResolution, ImGuiSelectableFlags_None, size);
+
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+
+    ImGui::VerticalSeparator(itemHeight);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { framePadding, framePadding });
+    ImGui::PushStyleColor(ImGuiCol_Header, m_settings.useLegacyParticleRenderer ? IM_COL32(79, 79, 79, 200) : 0);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(79, 79, 79, 200));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(90, 90, 90, 255));
+
+    size = { ImGui::CalcTextSize("Accurate Renderer").x + 2.0f * framePadding, itemHeight };
+    ImGui::Selectable("Accurate Renderer", &m_settings.useLegacyParticleRenderer, ImGuiSelectableFlags_None, size);
 
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar();
@@ -340,6 +355,7 @@ void Editor::loadConfig(const nlohmann::json& config) {
     m_settings.maxParticles = settings.value("maxParticles", m_settingsDefault.maxParticles);
     m_settings.useFixedDsResolution = settings.value("useFixedDsResolution", m_settingsDefault.useFixedDsResolution);
     m_settings.fixedDsResolutionScale = settings.value("fixedDsResolutionScale", m_settingsDefault.fixedDsResolutionScale);
+    m_settings.useLegacyParticleRenderer = settings.value("useLegacyParticleRenderer", m_settingsDefault.useLegacyParticleRenderer);
 }
 
 void Editor::saveConfig(nlohmann::json& config) const {
@@ -358,7 +374,8 @@ void Editor::saveConfig(nlohmann::json& config) const {
         { "backgroundColor", saveVec4(m_settings.backgroundColor) },
         { "maxParticles", m_settings.maxParticles },
         { "useFixedDsResolution", m_settings.useFixedDsResolution },
-        { "fixedDsResolutionScale", m_settings.fixedDsResolutionScale }
+        { "fixedDsResolutionScale", m_settings.fixedDsResolutionScale },
+        { "useLegacyParticleRenderer", m_settings.useLegacyParticleRenderer }
     });
 }
 
@@ -979,6 +996,7 @@ void Editor::renderSettings() {
 
         ImGui::SeparatorText("Rendering");
         bool changed = false;
+        bool swapRenderer = false;
 
         changed |= ImGui::Checkbox("Use DS Resolution", &m_settings.useFixedDsResolution);
         ImGui::SameLine();
@@ -993,8 +1011,13 @@ void Editor::renderSettings() {
             m_settings.fixedDsResolutionScale = glm::clamp(m_settings.fixedDsResolutionScale, 1, 8);
         }
 
+        if (ImGui::Checkbox("Use Accurate Renderer", &m_settings.useLegacyParticleRenderer)) {
+            changed = true;
+            swapRenderer = true;
+        }
+
         if (changed) {
-            updateRenderSettings(); // Update all open editors
+            updateRenderSettings(swapRenderer); // Update all open editors
         }
 
         if (ImGui::Button("Reset to Defaults")) {
@@ -1037,10 +1060,20 @@ void Editor::renderSettings() {
     ImGui::PopStyleVar();
 }
 
-void Editor::updateRenderSettings() {
+void Editor::updateRenderSettings(bool swapRenderer) {
+    const auto legacyRenderer = m_settings.useLegacyParticleRenderer;
     const auto editors = g_projectManager->getOpenEditors();
+
     for (const auto& editor : editors) {
         editor->updateViewportSize();
+
+        if (swapRenderer) {
+            if (legacyRenderer) {
+                editor->useLegacyRenderer();
+            } else {
+                editor->useModernRenderer();
+            }
+        }
     }
 }
 

@@ -4,7 +4,7 @@ if (WIN32)
     set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
 endif()
 
-project(nitroefx)
+project(nitroefx C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

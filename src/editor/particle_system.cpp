@@ -3,7 +3,8 @@
 
 
 ParticleSystem::ParticleSystem(u32 maxParticles, std::span<const SPLTexture> textures)
-    : m_renderer(maxParticles, textures), m_maxParticles(maxParticles) {
+    : m_maxParticles(maxParticles) {
+    m_renderer = std::make_unique<ModernParticleRenderer>(maxParticles, textures);
     m_particles = new SPLParticle[maxParticles];
 
     for (u32 i = 0; i < maxParticles; i++) {
@@ -43,15 +44,17 @@ void ParticleSystem::update(float deltaTime) {
 }
 
 void ParticleSystem::render(const CameraParams& params) {
-    m_renderer.begin(params.view, params.proj);
+    m_renderer->begin(params.view, params.proj);
 
     for (auto& emitter : m_emitters) {
         if (!emitter->m_state.renderingDisabled) {
             emitter->render(params);
+        } else {
+            spdlog::info("Emitter rendering is disabled");
         }
     }
 
-    m_renderer.end();
+    m_renderer->end();
 }
 
 std::weak_ptr<SPLEmitter> ParticleSystem::addEmitter(const SPLResource& resource, bool looping) {
@@ -98,9 +101,19 @@ void ParticleSystem::setMaxParticles(u32 maxParticles) {
     }
 
     m_maxParticles = maxParticles;
-    m_renderer.setMaxInstances(maxParticles);
+    m_renderer->setMaxInstances(maxParticles);
 }
 
 void ParticleSystem::forceKillAllEmitters() {
     m_emitters.clear();
+}
+
+void ParticleSystem::useLegacyRenderer() {
+    // Caller must set textures after switching
+    m_renderer = std::make_unique<LegacyParticleRenderer>(m_maxParticles, std::span<const SPLTexture>());
+}
+
+void ParticleSystem::useModernRenderer() {
+    // Caller must set textures after switching
+    m_renderer = std::make_unique<ModernParticleRenderer>(m_maxParticles, std::span<const SPLTexture>());
 }

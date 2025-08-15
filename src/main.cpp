@@ -12,12 +12,17 @@ int nitroefx_main(int argc, char** argv) {
     // -- CLI Mode
     // $ nitroefx cli <options>
 
+    if (argc == 1) {
+        // No arguments provided, start in GUI mode
+        Application app;
+        return app.run(argc, argv);
+    }
+
     argparse::ArgumentParser program("nitroefx");
     
     // Optional path for GUI mode
     program.add_argument("path")
-           .help("Optional path for GUI mode")
-           .nargs(0);
+           .help("Optional path for GUI mode");
 
     // Subcommand for CLI
     argparse::ArgumentParser cli("cli", "Command Line Interface for nitroefx");

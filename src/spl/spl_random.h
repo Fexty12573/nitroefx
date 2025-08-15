@@ -7,6 +7,8 @@
 
 #include <glm/glm.hpp>
 
+#define SPL_ACCURATE_RANDOM 1
+
 class SPLRandom {
 public:
     static u64 nextU64() {
@@ -23,6 +25,10 @@ public:
 
     static f32 nextF32N() {
         return nextF32() * 2.0f - 1.0f;
+    }
+
+    static u32 nextU32(int bits) {
+        return nextU32() >> (sizeof(u32) * 8 - bits);
     }
 
     static glm::vec3 unitVector() {
@@ -46,18 +52,32 @@ public:
     // Generates a random float in the range (n * (variance / 2)) around n
     // So the value range is [n * (1 - variance / 2), n * (1 + variance / 2)]
     static f32 scaledRange(f32 n, f32 variance) {
+#if SPL_ACCURATE_RANDOM
+        const fx32 nx = FX_F32_TO_FX32(n);
+        const fx32 range = (fx32)(variance * 255.0f);
+        const fx32 v = (nx * (255 - ((range * (fx32)nextU32(8)) >> 8))) >> 8;
+        return FX_FX32_TO_F32(v);
+#else
         variance = glm::clamp(variance, 0.0f, 1.0f);
         const f32 min = n * (1.0f - variance / 2.0f);
         const f32 max = n * (1.0f + variance / 2.0f);
         return min + nextF32() * (max - min);
+#endif
     }
 
     // Generates a random float in the range [n, n * (1 + variance)]
     static f32 scaledRange2(f32 n, f32 variance) {
+#if SPL_ACCURATE_RANDOM
+        const fx32 nx = FX_F32_TO_FX32(n);
+        const fx32 range = (fx32)(variance * 255.0f);
+        const fx32 v = (nx * (255 + range - ((range * (fx32)nextU32(8)) >> 7))) >> 8;
+        return FX_FX32_TO_F32(v);
+#else
         const f32 min = n;
         const f32 max = n * (1.0f + variance);
 
         return min + nextF32() * (max - min);
+#endif
     }
 
     static f32 range(f32 min, f32 max) {
@@ -65,7 +85,14 @@ public:
     }
 
     static f32 aroundZero(f32 range) {
+#if SPL_ACCURATE_RANDOM
+        const fx32 rangeFX = FX_F32_TO_FX32(range);
+        return FX_FX32_TO_F32(
+            (rangeFX * (s32)nextU32(9) - (rangeFX << 8)) >> 8
+        );
+#else
         return SPLRandom::range(-range, range);
+#endif
     }
 
     SPLRandom(const SPLRandom&) = delete;
