@@ -590,7 +590,7 @@ SPLChildResource SPLArchive::fromNative(const SPLChildResourceNative &native) {
         .endScale = FX_FX16_TO_F32(native.endScale),
         .lifeTime = toSeconds(native.lifeTime),
         .velocityRatio = native.velocityRatio / 255.0f,
-        .scaleRatio = native.scaleRatio / 255.0f,
+        .scaleRatio = ((int)native.scaleRatio + 1) / 64.0f,
         .color = native.color,
         .misc = {
             .emissionCount = (u8)native.misc.emissionCount,
@@ -798,7 +798,7 @@ SPLChildResourceNative SPLArchive::toNative(const SPLChildResource& anim) {
         .endScale = FX_F32_TO_FX16(anim.endScale),
         .lifeTime = toFrames<u16>(anim.lifeTime),
         .velocityRatio = (u8)(anim.velocityRatio * 255.0f),
-        .scaleRatio = (u8)(anim.scaleRatio * 255.0f),
+        .scaleRatio = (u8)glm::clamp(anim.scaleRatio * 64.0f - 1.0f, 0.0f, 255.0f),
         .color = anim.color,
         .misc = {
             .emissionCount = (u8)anim.misc.emissionCount,

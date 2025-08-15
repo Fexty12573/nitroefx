@@ -275,13 +275,25 @@ void SPLEmitter::update(float deltaTime) {
 
 void SPLEmitter::render(const CameraParams& params) {
     auto& renderer = m_system->getRenderer();
-    for (const auto ptcl : std::views::reverse(m_particles)) {
-        ptcl->render(&renderer, params, m_texCoords.s, m_texCoords.t);
-    }
 
-    for (const auto ptcl : std::views::reverse(m_childParticles)) {
-        ptcl->render(&renderer, params, m_childTexCoords.s, m_childTexCoords.t);
+    if (m_resource->header.flags.drawChildrenFirst) {
+        for (const auto ptcl : m_childParticles) {
+            ptcl->render(&renderer, params, m_childTexCoords.s, m_childTexCoords.t);
+        }
+
+        for (const auto ptcl : m_particles) {
+            ptcl->render(&renderer, params, m_texCoords.s, m_texCoords.t);
+        }
+    } else {
+        for (const auto ptcl : std::views::reverse(m_particles)) {
+            ptcl->render(&renderer, params, m_texCoords.s, m_texCoords.t);
+        }
+
+        for (const auto ptcl : std::views::reverse(m_childParticles)) {
+            ptcl->render(&renderer, params, m_childTexCoords.s, m_childTexCoords.t);
+        }
     }
+    
 }
 
 void SPLEmitter::emit(u32 count) {

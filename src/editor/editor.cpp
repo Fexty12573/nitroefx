@@ -2102,7 +2102,7 @@ void Editor::renderChildrenEditor(SPLResource& res) {
         NOTIFY(ImGui::SliderFloat("Velocity Ratio", &child.velocityRatio, 0, 1));
         HELP(velocityRatio);
 
-        NOTIFY(ImGui::SliderFloat("Scale Ratio", &child.scaleRatio, 0, 1));
+        NOTIFY(ImGui::SliderFloat("Scale Ratio", &child.scaleRatio, 1 / 64.0f,  255 / 64.0f));
         HELP(scaleRatio);
 
         NOTIFY(ImGui::ColorEdit3("Color", glm::value_ptr(child.color)));
