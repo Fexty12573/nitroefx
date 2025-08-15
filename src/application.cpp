@@ -120,10 +120,12 @@ int Application::run(int argc, char** argv) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    io.IniFilename = "nitroefx.ini";
 
     m_editor = std::make_unique<Editor>();
     m_settings = ApplicationSettings::getDefault();
@@ -168,7 +170,13 @@ int Application::run(int argc, char** argv) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
-        ImGui::DockSpaceOverViewport();
+
+        // Build default docking layout once if no ini file exists
+        if (!m_layoutInitialized) {
+            initDefaultDockingLayout();
+        }
+
+        ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"));
 
         renderMenuBar();
         g_projectManager->render();
@@ -1264,4 +1272,41 @@ std::string Application::openDirectory(const char* title) {
     const auto folder = tinyfd_selectFolderDialog(title ? title : "Open Project", nullptr);
     return folder ? folder : "";
 #endif
+}
+
+void Application::initDefaultDockingLayout() {
+    if (m_layoutInitialized) return;
+
+    // If an ini file already exists, don't override user's layout
+    const char* ini_filename = ImGui::GetIO().IniFilename;
+    if (ini_filename && std::filesystem::exists(ini_filename)) {
+        m_layoutInitialized = true;
+        return;
+    }
+
+    ImGuiID dockspace_id = ImGui::GetID("DockSpace");
+
+    ImGui::DockBuilderRemoveNode(dockspace_id); // Clear existing layout
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+    // Split the dockspace into left and right
+    ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.19f, nullptr, &dockspace_id);
+    const ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.3f, nullptr, &dockspace_id);
+    const ImGuiID dock_id_center = dockspace_id; // remaining central
+
+    // On the left, split for bottom panel (Resource Picker)
+    const ImGuiID dock_id_left_top = ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Up, 0.50f, nullptr, &dock_id_left);
+    const ImGuiID dock_id_left_bottom = dock_id_left; // remainder
+
+    // Dock windows
+    ImGui::DockBuilderDockWindow("Project Manager##ProjectManager", dock_id_left_top);
+    ImGui::DockBuilderDockWindow("Resource Picker##Editor", dock_id_left_bottom);
+    ImGui::DockBuilderDockWindow("Texture Manager##Editor", dock_id_left_bottom);
+    ImGui::DockBuilderDockWindow("Work Area##Editor", dock_id_center);
+    ImGui::DockBuilderDockWindow("Resource Editor##Editor", dock_id_right);
+
+    ImGui::DockBuilderFinish(ImGui::GetID("DockSpace"));
+
+    m_layoutInitialized = true;
 }

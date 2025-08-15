@@ -53,6 +53,9 @@ private:
     void addRecentFile(const std::string& path);
     void addRecentProject(const std::string& path);
 
+    // Initialize a default docking layout if no ImGui ini file exists
+    void initDefaultDockingLayout();
+
 private:
     bool m_running = true;
     SDL_Window* m_window = nullptr;
@@ -76,6 +79,9 @@ private:
 
     bool m_performanceWindowOpen = false;
     float m_deltaTime = 0.0f;
+
+    // Tracks whether we've already attempted to initialize the layout
+    bool m_layoutInitialized = false;
 };
 
 inline Application* g_application = nullptr;
