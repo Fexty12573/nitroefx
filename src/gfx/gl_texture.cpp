@@ -282,9 +282,9 @@ std::vector<u8> GLTexture::convertPalette16(const u8* tex, const GXRgba* pal, si
         texture[i * 4 + 3] = index == 0 ? alpha0 : 0xFF;
 
         index = (pixel >> 4) & 0xF;
-        texture[i * 4 + 4] = pal[index].r;
-        texture[i * 4 + 5] = pal[index].g;
-        texture[i * 4 + 6] = pal[index].b;
+        texture[i * 4 + 4] = pal[index].r8();
+        texture[i * 4 + 5] = pal[index].g8();
+        texture[i * 4 + 6] = pal[index].b8();
         texture[i * 4 + 7] = index == 0 ? alpha0 : 0xFF;
     }
 
