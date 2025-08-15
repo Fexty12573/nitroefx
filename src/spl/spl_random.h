@@ -54,7 +54,7 @@ public:
     static f32 scaledRange(f32 n, f32 variance) {
 #if SPL_ACCURATE_RANDOM
         const fx32 nx = FX_F32_TO_FX32(n);
-        const fx32 range = FX_F32_TO_FX32(variance);
+        const fx32 range = (fx32)(variance * 255.0f);
         const fx32 v = (nx * (255 - ((range * (fx32)nextU32(8)) >> 8))) >> 8;
         return FX_FX32_TO_F32(v);
 #else

@@ -54,6 +54,7 @@ private:
     void submit(u32 texture, const ParticleInstance& instance);
     void renderBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
     void renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
+    void renderPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
 
 private:
     u32 m_maxInstances;
@@ -107,6 +108,7 @@ private:
     void drawXYPlane(f32 s, f32 t, f32 x, f32 y) const;
     void drawXZPlane(f32 s, f32 t, f32 x, f32 z) const;
 
+    glm::mat4 rotate(SPLPolygonRotAxis axis, f32 sin, f32 cos) const;
     glm::mat4 rotateY(f32 sin, f32 cos) const;
     glm::mat4 rotateXYZ(f32 sin, f32 cos) const;
 
@@ -115,6 +117,7 @@ private:
     void begin(PolygonMode polygonMode, CullMode cullMode, bool fog) const;
     void renderBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
     void renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
+    void renderPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t);
 
 private:
     std::span<const SPLTexture> m_textures;

@@ -49,6 +49,8 @@ void ParticleSystem::render(const CameraParams& params) {
     for (auto& emitter : m_emitters) {
         if (!emitter->m_state.renderingDisabled) {
             emitter->render(params);
+        } else {
+            spdlog::info("Emitter rendering is disabled");
         }
     }
 

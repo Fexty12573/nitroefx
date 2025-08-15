@@ -207,12 +207,16 @@ void ModernParticleRenderer::renderBillboard(const SPLParticle& particle, const 
         * glm::scale(glm::mat4(1), scale);
 
     ParticleInstance inst{};
-    inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+    inst.color = glm::vec4(
+        glm::mix(particle.color, resource->header.color, 0.5f),
+        particle.visibility.baseAlpha * particle.visibility.animAlpha
+    );
     inst.transform = transform;
     inst.texCoords[0] = { 0, t };
     inst.texCoords[1] = { s, t };
     inst.texCoords[2] = { s, 0 };
     inst.texCoords[3] = { 0, 0 };
+
     submit(particle.texture, inst);
 }
 
@@ -278,12 +282,66 @@ void ModernParticleRenderer::renderDirectionalBillboard(const SPLParticle& parti
     transform[3] = glm::vec4(particle.emitterPos + particle.position, 1.0f);
 
     ParticleInstance inst{};
-    inst.color = glm::vec4(particle.color, particle.visibility.baseAlpha * particle.visibility.animAlpha);
+    inst.color = glm::vec4(
+        glm::mix(particle.color, resource->header.color, 0.5f),
+        particle.visibility.baseAlpha * particle.visibility.animAlpha
+    );
     inst.transform = transform;
     inst.texCoords[0] = { 0, 0 };
     inst.texCoords[1] = { s, 0 };
     inst.texCoords[2] = { s, t };
     inst.texCoords[3] = { 0, t };
+
+    submit(particle.texture, inst);
+}
+
+void ModernParticleRenderer::renderPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto resource = particle.emitter->getResource();
+    const auto& hdr = resource->header;
+
+    glm::vec3 rotAxis;
+
+    if (hdr.flags.polygonRotAxis == SPLPolygonRotAxis::Y) {
+        rotAxis = { 0, 1, 0 };
+    } else if (hdr.flags.polygonRotAxis == SPLPolygonRotAxis::XYZ) {
+        rotAxis = { 1, 1, 1 };
+    }
+
+    glm::vec3 scale = { particle.baseScale * hdr.aspectRatio, particle.baseScale, 1 };
+
+    switch (hdr.misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale;
+        scale.y *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale;
+        break;
+    }
+
+    glm::mat4 rot = glm::rotate(glm::mat4(1), particle.rotation, rotAxis);
+    if (hdr.flags.polygonReferencePlane == 1) { // XZ plane
+        rot = glm::rotate(rot, glm::half_pi<f32>(), { 1, 0, 0 });
+    }
+
+    const auto pos = particle.emitterPos + particle.position;
+    const auto transform = glm::translate(glm::mat4(1), pos)
+        * rot
+        * glm::scale(glm::mat4(1), scale);
+
+    ParticleInstance inst{};
+    inst.color = glm::vec4(
+        glm::mix(particle.color, hdr.color, 0.5f),
+        particle.visibility.baseAlpha * particle.visibility.animAlpha
+    );
+    inst.transform = transform;
+    inst.texCoords[0] = { 0, t };
+    inst.texCoords[1] = { s, t };
+    inst.texCoords[2] = { s, 0 };
+    inst.texCoords[3] = { 0, 0 };
 
     submit(particle.texture, inst);
 }
@@ -323,6 +381,8 @@ void ModernParticleRenderer::renderParticle(const SPLParticle& particle, const C
         renderDirectionalBillboard(particle, params, s, t);
         break;
     case SPLDrawType::Polygon:
+        renderPolygon(particle, params, s, t);
+        break;
     case SPLDrawType::DirectionalPolygon:
     case SPLDrawType::DirectionalPolygonCenter:
         // Not yet implemented in either backend
@@ -365,6 +425,9 @@ void LegacyParticleRenderer::renderParticle(const SPLParticle& particle, const C
     case SPLDrawType::DirectionalBillboard:
         renderDirectionalBillboard(particle, params, s, t);
         break;
+    case SPLDrawType::Polygon:
+        renderPolygon(particle, params, s, t);
+        break;
     }
 }
 
@@ -402,6 +465,17 @@ void LegacyParticleRenderer::drawXZPlane(f32 s, f32 t, f32 x, f32 z) const {
     glVertex3f(x - 1.0f, 0.0f, z - 1.0f); // Bottom left
 
     glEnd();
+}
+
+glm::mat4 LegacyParticleRenderer::rotate(SPLPolygonRotAxis axis, f32 sin, f32 cos) const {
+    switch (axis) {
+    case SPLPolygonRotAxis::Y:
+        return rotateY(sin, cos);
+    case SPLPolygonRotAxis::XYZ:
+        return rotateXYZ(sin, cos);
+    }
+
+    return glm::identity<glm::mat4>();
 }
 
 glm::mat4 LegacyParticleRenderer::rotateY(f32 sin, f32 cos) const {
@@ -537,7 +611,6 @@ void LegacyParticleRenderer::renderBillboard(const SPLParticle& particle, const 
 }
 
 void LegacyParticleRenderer::renderDirectionalBillboard(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
-    // --- 1) Compute base scales exactly like the DS ---
     const auto& resource = particle.emitter->getResource();
     const auto& hdr = resource->header;
     const auto& misc = hdr.misc;
@@ -547,11 +620,15 @@ void LegacyParticleRenderer::renderDirectionalBillboard(const SPLParticle& parti
 
     switch (misc.scaleAnimDir) {
     case SPLScaleAnimDir::XY:
-        sclX *= particle.animScale; sclY *= particle.animScale; break;
+        sclX *= particle.animScale;
+        sclY *= particle.animScale;
+        break;
     case SPLScaleAnimDir::X:
-        sclX *= particle.animScale; break;
+        sclX *= particle.animScale;
+        break;
     case SPLScaleAnimDir::Y:
-        sclY *= particle.animScale; break;
+        sclY *= particle.animScale;
+        break;
     }
 
     const glm::vec3 v = particle.velocity;
@@ -586,6 +663,49 @@ void LegacyParticleRenderer::renderDirectionalBillboard(const SPLParticle& parti
         particle.visibility.baseAlpha * particle.visibility.animAlpha));
 
     drawXYPlane(s, t, hdr.polygonX, hdr.polygonY);
+
+    glCall(glPopMatrix());
+}
+
+void LegacyParticleRenderer::renderPolygon(const SPLParticle& particle, const CameraParams& params, f32 s, f32 t) {
+    const auto resource = particle.emitter->getResource();
+    const auto& hdr = resource->header;
+
+    const auto rot = rotate(hdr.flags.polygonRotAxis, glm::sin(particle.rotation), glm::cos(particle.rotation));
+
+    glm::vec3 scale = { particle.baseScale * hdr.aspectRatio, particle.baseScale, 1.0f };
+
+    switch (hdr.misc.scaleAnimDir) {
+    case SPLScaleAnimDir::XY:
+        scale.x *= particle.animScale;
+        scale.y *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::X:
+        scale.x *= particle.animScale;
+        break;
+    case SPLScaleAnimDir::Y:
+        scale.y *= particle.animScale;
+        break;
+    }
+
+    const auto pos = particle.emitterPos + particle.position;
+
+    const glm::mat4 transform = glm::translate(glm::mat4(1), pos)
+        * rot
+        * glm::scale(glm::mat4(1), scale);
+
+    const auto color = glm::mix(particle.color, hdr.color, 0.5f);
+
+    glCall(glMatrixMode(GL_MODELVIEW));
+    glCall(glPushMatrix());
+    glCall(glMultMatrixf(glm::value_ptr(transform)));
+    glCall(glColor4f(color.r, color.g, color.b, particle.visibility.baseAlpha * particle.visibility.animAlpha));
+
+    if (hdr.flags.polygonReferencePlane == 1) { // XZ plane
+        drawXZPlane(s, t, hdr.polygonX, hdr.polygonY);
+    } else {
+        drawXYPlane(s, t, hdr.polygonX, hdr.polygonY);
+    }
 
     glCall(glPopMatrix());
 }
