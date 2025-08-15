@@ -454,11 +454,9 @@ void ModernParticleRenderer::renderParticle(const SPLParticle& particle, const C
     case SPLDrawType::Polygon:
         renderPolygon(particle, params, s, t);
         break;
-    case SPLDrawType::DirectionalPolygon:
-        renderDirectionalPolygon(particle, params, s, t);
-        break;
+    case SPLDrawType::DirectionalPolygon: [[fallthrough]];
     case SPLDrawType::DirectionalPolygonCenter:
-        // Not yet implemented in either backend
+        renderDirectionalPolygon(particle, params, s, t);
         break;
     }
 }
@@ -501,7 +499,8 @@ void LegacyParticleRenderer::renderParticle(const SPLParticle& particle, const C
     case SPLDrawType::Polygon:
         renderPolygon(particle, params, s, t);
         break;
-    case SPLDrawType::DirectionalPolygon:
+    case SPLDrawType::DirectionalPolygon: [[fallthrough]];
+    case SPLDrawType::DirectionalPolygonCenter:
         renderDirectionalPolygon(particle, params, s, t);
         break;
     }
