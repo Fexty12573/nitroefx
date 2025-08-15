@@ -659,8 +659,6 @@ void Application::renderMenuBar() {
                 m_editor->resetCamera();
             }
 
-            ImGui::VerticalSeparator(itemHeight);
-
             m_editor->renderToolbar(itemHeight);
 
             ImGui::EndMenuBar();
