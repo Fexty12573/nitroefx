@@ -36,6 +36,8 @@ public:
     static std::filesystem::path getConfigPath();
     static std::filesystem::path getTempPath();
 
+    static constexpr auto VERSION = "v1.0.0";
+
 private:
     void pollEvents();
     void handleKeydown(const SDL_Event& event);
@@ -44,6 +46,7 @@ private:
     void renderMenuBar();
     void renderPreferences();
     void renderPerformanceWindow();
+    void renderAboutWindow();
     void setColors();
     void loadFonts();
     void loadConfig();
@@ -74,7 +77,9 @@ private:
     ApplicationSettings m_settings;
     std::vector<u32> m_sortedActions;
     int m_preferencesWindowId = 0;
+    int m_aboutWindowId = 0;
     bool m_preferencesOpen = false;
+    bool m_aboutWindowOpen = false;
     bool m_listeningForInput = false;
     bool m_exitKeybindListening = false;
     Keybind* m_listeningKeybind = nullptr;

@@ -146,6 +146,7 @@ int Application::run(int argc, char** argv) {
     ImGui_ImplOpenGL3_Init("#version 450");
 
     m_preferencesWindowId = ImHashStr("Preferences##Application");
+    m_aboutWindowId = ImHashStr("About##Application");
 
     if (argc > 1) {
         const std::filesystem::path arg = argv[1];
@@ -194,6 +195,10 @@ int Application::run(int argc, char** argv) {
 
         if (m_performanceWindowOpen) {
             renderPerformanceWindow();
+        }
+
+        if (m_aboutWindowOpen) {
+            renderAboutWindow();
         }
 
         ImGui::Render();
@@ -601,6 +606,26 @@ void Application::renderMenuBar() {
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItemIcon(ICON_FA_CODE_BRANCH, "GitHub Repository", nullptr, false, IM_COL32(255, 221, 93, 255))) {
+                SDL_OpenURL("https://github.com/Fexty12573/nitroefx");
+            }
+
+            if (ImGui::MenuItemIcon(ICON_FA_BUG, "Report Issue", nullptr, false, IM_COL32(255, 93, 93, 255))) {
+                SDL_OpenURL("https://github.com/Fexty12573/nitroefx/issues/new");
+            }
+
+            if (ImGui::MenuItemIcon(ICON_FA_CIRCLE_INFO, "About NitroEFX", nullptr, false, IM_COL32(93, 171, 231, 255))) {
+                ImGui::PushOverrideID(m_aboutWindowId);
+                ImGui::OpenPopup("About NitroEFX");
+                ImGui::PopID();
+
+                m_aboutWindowOpen = true;
+            }
+
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMainMenuBar();
     }
 
@@ -772,6 +797,25 @@ void Application::renderPerformanceWindow() {
     }
 
     ImGui::End();
+}
+
+void Application::renderAboutWindow() {
+    ImGui::PushOverrideID(m_aboutWindowId);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
+
+    if (ImGui::BeginPopupModal("About NitroEFX", &m_aboutWindowOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("NitroEFX %s", Application::VERSION);
+        ImGui::Separator();
+        ImGui::Text("A particle editor for the Nintendo DS Pokémon games.");
+        ImGui::Text("Created by Fexty12573");
+        ImGui::TextLinkOpenURL("https://github.com/Fexty12573/nitroefx");
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopID();
 }
 
 void Application::setColors() {
