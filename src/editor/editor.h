@@ -35,7 +35,8 @@ public:
     void updateParticles(float deltaTime);
     void openSettings();
 
-    void playEmitterAction(EmitterSpawnType spawnType);
+    void playEmitter(EmitterSpawnType spawnType);
+    void playAllEmitters(EmitterSpawnType spawnType);
     void killEmitters();
     void resetCamera();
 

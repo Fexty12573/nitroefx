@@ -30,6 +30,7 @@ struct ApplicationAction {
     static constexpr u32 Redo = "application/Edit/Redo"_crc;
     static constexpr u32 PlayEmitter = "application/Edit/PlayEmitter"_crc;
     static constexpr u32 PlayEmitterLooped = "application/Edit/PlayEmitterLooped"_crc;
+    static constexpr u32 PlayAllEmitters = "application/Edit/PlayAllEmitters"_crc;
     static constexpr u32 KillEmitters = "application/Edit/KillEmitters"_crc;
     static constexpr u32 ResetCamera = "application/Edit/ResetCamera"_crc;
 
@@ -47,6 +48,7 @@ struct ApplicationAction {
         { Redo, "Redo" },
         { PlayEmitter, "Play Emitter" },
         { PlayEmitterLooped, "Play Emitter (Looped)" },
+        { PlayAllEmitters, "Play All Emitters" },
         { KillEmitters, "Kill Emitters" },
         { ResetCamera, "Reset Camera" }
     };

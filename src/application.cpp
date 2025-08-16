@@ -62,6 +62,7 @@ Application::Application() {
         ApplicationAction::Redo,
         ApplicationAction::PlayEmitter,
         ApplicationAction::PlayEmitterLooped,
+        ApplicationAction::PlayAllEmitters,
         ApplicationAction::KillEmitters,
         ApplicationAction::ResetCamera,
     };
@@ -366,9 +367,9 @@ void Application::handleKeydown(const SDL_Event& event) {
     case SDLK_P:
         if (event.key.mod & SDL_KMOD_CTRL) {
             if (event.key.mod & SDL_KMOD_SHIFT) {
-                m_editor->playEmitterAction(EmitterSpawnType::Looped);
+                m_editor->playEmitter(EmitterSpawnType::Looped);
             } else {
-                m_editor->playEmitterAction(EmitterSpawnType::SingleShot);
+                m_editor->playEmitter(EmitterSpawnType::SingleShot);
             }
         }
         break;
@@ -544,11 +545,15 @@ void Application::renderMenuBar() {
             }
 
             if (ImGui::MenuItemIcon(ICON_FA_PLAY, "Play Emitter", KEYBINDSTR(PlayEmitter), false, IM_COL32(143, 228, 143, 255), hasActiveEditor)) {
-                m_editor->playEmitterAction(EmitterSpawnType::SingleShot);
+                m_editor->playEmitter(EmitterSpawnType::SingleShot);
             }
 
             if (ImGui::MenuItemIcon(ICON_FA_REPEAT, "Play Looped Emitter", KEYBINDSTR(PlayEmitterLooped), false, IM_COL32(133, 208, 133, 255), hasActiveEditor)) {
-                m_editor->playEmitterAction(EmitterSpawnType::Looped);
+                m_editor->playEmitter(EmitterSpawnType::Looped);
+            }
+
+            if (ImGui::MenuItemIcon(ICON_FA_PLAY, "Play All Emitters", KEYBINDSTR(PlayAllEmitters), false, IM_COL32(143, 228, 143, 255), hasActiveEditor)) {
+                m_editor->playAllEmitters(EmitterSpawnType::SingleShot);
             }
 
             if (ImGui::MenuItemIcon(ICON_FA_STOP, "Kill Emitters", KEYBINDSTR(KillEmitters), false, IM_COL32(245, 87, 98, 255), hasActiveEditor)) {
@@ -651,11 +656,11 @@ void Application::renderMenuBar() {
             ImGui::VerticalSeparator(itemHeight);
 
             if (ImGui::IconButton(ICON_FA_PLAY, size, IM_COL32(143, 228, 143, 255), hasActiveEditor)) {
-                m_editor->playEmitterAction(EmitterSpawnType::SingleShot);
+                m_editor->playEmitter(EmitterSpawnType::SingleShot);
             }
 
             if (ImGui::IconButton(ICON_FA_REPEAT, size, IM_COL32(133, 208, 133, 255), hasActiveEditor)) {
-                m_editor->playEmitterAction(EmitterSpawnType::Looped);
+                m_editor->playEmitter(EmitterSpawnType::Looped);
             }
 
             if (ImGui::IconButton(ICON_FA_STOP, size, IM_COL32(245, 87, 98, 255), hasActiveEditor)) {
@@ -947,7 +952,7 @@ void Application::loadConfig() {
     for (const auto& project : config["recentProjects"]) {
         m_recentProjects.push_back(project.get<std::string>());
     }
-
+    
     if (config.contains("keybinds")) {
         for (const auto& keybind : config["keybinds"]) {
             Keybind bind{};
@@ -1039,10 +1044,13 @@ void Application::executeAction(u32 action) {
         m_running = false;
         break;
     case ApplicationAction::PlayEmitter:
-        m_editor->playEmitterAction(EmitterSpawnType::SingleShot);
+        m_editor->playEmitter(EmitterSpawnType::SingleShot);
         break;
     case ApplicationAction::PlayEmitterLooped:
-        m_editor->playEmitterAction(EmitterSpawnType::Looped);
+        m_editor->playEmitter(EmitterSpawnType::Looped);
+        break;
+    case ApplicationAction::PlayAllEmitters:
+        m_editor->playAllEmitters(EmitterSpawnType::SingleShot);
         break;
     case ApplicationAction::KillEmitters:
         m_editor->killEmitters();

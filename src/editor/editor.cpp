@@ -418,7 +418,7 @@ void Editor::redo() {
     }
 }
 
-void Editor::playEmitterAction(EmitterSpawnType spawnType) {
+void Editor::playEmitter(EmitterSpawnType spawnType) {
     const auto& editor = g_projectManager->getActiveEditor();
     if (!editor) {
         return;
@@ -442,6 +442,29 @@ void Editor::playEmitterAction(EmitterSpawnType spawnType) {
             std::chrono::duration<float>(m_emitterInterval),
             editor->getUniqueID()
         );
+    }
+}
+
+void Editor::playAllEmitters(EmitterSpawnType spawnType) {
+    const auto& editor = g_projectManager->getActiveEditor();
+    if (!editor) {
+        return;
+    }
+
+    for (size_t i = 0; i < editor->getArchive().getResources().size(); ++i) {
+        editor->getParticleSystem().addEmitter(
+            editor->getArchive().getResource(i),
+            spawnType == EmitterSpawnType::Looped
+        );
+
+        if (spawnType == EmitterSpawnType::Interval) {
+            m_emitterTasks.emplace_back(
+                i,
+                std::chrono::steady_clock::now(),
+                std::chrono::duration<float>(m_emitterInterval),
+                editor->getUniqueID()
+            );
+        }
     }
 }
 
@@ -916,12 +939,8 @@ void Editor::renderResourceEditor() {
             const auto& texture = textures[resource.header.misc.textureIndex];
 
             if (ImGui::IconButton(ICON_FA_PLAY, "Play Emitter", IM_COL32(143, 228, 143, 255))) {
-                playEmitterAction(m_emitterSpawnType);
+                playEmitter(m_emitterSpawnType);
             }
-
-            //if (ImGui::GreenButton("Play Emitter")) {
-            //    playEmitterAction(m_emitterSpawnType);
-            //}
 
             ImGui::SameLine();
             ImGui::SetNextItemWidth(150);
@@ -931,6 +950,10 @@ void Editor::renderResourceEditor() {
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
                 ImGui::InputFloat("##Interval", &m_emitterInterval, 0.1f, 1.0f, "%.2fs");
+            }
+
+            if (ImGui::IconButton(ICON_FA_PLAY, "Play All Emitters", IM_COL32(143, 228, 143, 255))) {
+                playAllEmitters(m_emitterSpawnType);
             }
 
             if (ImGui::IconButton(ICON_FA_STOP, "Kill Emitters", IM_COL32(245, 87, 98, 255))) {
