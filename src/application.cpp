@@ -125,7 +125,9 @@ int Application::run(int argc, char** argv) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-    io.IniFilename = "nitroefx.ini";
+
+    m_iniFilename = (getConfigPath() / "nitroefx.ini").string();
+    io.IniFilename = m_iniFilename.c_str();
 
     m_editor = std::make_unique<Editor>();
     m_settings = ApplicationSettings::getDefault();

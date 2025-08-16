@@ -68,6 +68,8 @@ private:
     std::deque<std::string> m_recentProjects;
 
     std::map<std::string, ImFont*> m_fonts;
+
+    std::string m_iniFilename;
     
     ApplicationSettings m_settings;
     std::vector<u32> m_sortedActions;
