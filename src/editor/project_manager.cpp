@@ -290,7 +290,7 @@ void ProjectManager::renderDirectory(const std::filesystem::path& path) {
 
 void ProjectManager::renderFile(const std::filesystem::path& path) {
     const auto text = fmt::format(ICON_FA_FILE " {}", path.filename().string());
-    const bool isSplFile = path.extension().string() == ".spa";
+    const bool isSplFile = s_spaExtensions.contains(path.extension().string());
     if (!isSplFile) {
         if (m_hideOtherFiles) {
             return;

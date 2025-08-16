@@ -150,7 +150,7 @@ int Application::run(int argc, char** argv) {
         const std::filesystem::path arg = argv[1];
         if (std::filesystem::is_directory(arg)) {
             g_projectManager->openProject(arg);
-        } else if (arg.extension() == ".spl") {
+        } else if (arg.extension() == ".spa") {
             g_projectManager->openEditor(arg);
         } else {
             spdlog::warn("Invalid argument: {}", arg.string());
@@ -1170,7 +1170,7 @@ void Application::tryOpenEditor(const std::filesystem::path& path) {
     if (!path.empty()) {
         addRecentFile(path.string());
         const auto extension = path.extension();
-        if (extension == ".spa" || extension == ".bin") {
+        if (SPLArchive::isValid(path)) {
             g_projectManager->openEditor(path);
         } else if (extension == ".narc" || extension == ".arc") {
             g_projectManager->openNarcProject(path);
@@ -1212,11 +1212,11 @@ std::filesystem::path Application::getTempPath() {
 }
 
 std::string Application::openFile() {
-    const char* filters[] = { "*.spa", "*.bin", "*.narc" };
+    const char* filters[] = { "*.spa", "*.bin", "*. APS", "*._APS", "*.APS", "*.narc" };
     const char* result = tinyfd_openFileDialog(
         "Open File", 
         "", 
-        3, 
+        6, 
         filters, 
         "SPL/NARC Files", 
         false

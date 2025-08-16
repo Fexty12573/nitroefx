@@ -128,6 +128,15 @@ private:
     std::filesystem::path m_contextMenuPath;
     std::filesystem::path m_selectedFile;
     std::string m_searchString;
+
+    static inline const std::unordered_set<std::string> s_spaExtensions = {
+        ".spa",
+        ".bin",
+        "._APS",
+        ". APS",
+        ".APS",
+        ""
+    };
 };
 
 
