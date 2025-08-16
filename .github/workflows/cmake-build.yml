@@ -122,14 +122,14 @@ jobs:
       shell: pwsh
       run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path build\nitroefx.exe -DestinationPath "dist\${{ github.ref_name }}-windows.zip" -Force
+          Compress-Archive -Path build\nitroefx.exe -DestinationPath "dist\nitroefx-${{ github.ref_name }}-windows.zip" -Force
 
     - name: Package artifact (Linux)
       if: matrix.os == 'ubuntu-latest'
       shell: bash
       run: |
           mkdir -p dist
-          tar -C build/ -czf "dist/${{ github.ref_name }}-linux.tar.gz" nitroefx
+          tar -C build/ -czf "dist/nitroefx-${{ github.ref_name }}-linux.tar.gz" nitroefx
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
