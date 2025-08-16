@@ -20,6 +20,7 @@
 #include <stb_image.h>
 #include <spng.h>
 #include <libimagequant.h>
+#include <SDL3/SDL_misc.h>
 
 
 #define LOCKED_EDITOR() activeEditor_locked
@@ -987,6 +988,17 @@ void Editor::renderSettings() {
 
     bool closedThroughButton = false;
     if (ImGui::BeginPopupModal("Settings##Editor", &m_settingsOpen)) {
+        // Reserve a footer area for action buttons and make the main content scrollable
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const float footerReserve = ImGui::GetFrameHeightWithSpacing() + style.ItemSpacing.y; // reserve approx one button row
+
+        ImGui::BeginChild(
+            ImGui::GetID("##SettingsFrame"),
+            ImVec2(0, -footerReserve),
+            ImGuiChildFlags_Border,
+            ImGuiWindowFlags_AlwaysVerticalScrollbar
+        );
+
         ImGui::SeparatorText("General");
         ImGui::InputScalar("Max Particles", ImGuiDataType_U32, &m_settings.maxParticles);
         ImGui::SameLine();
@@ -1029,6 +1041,8 @@ void Editor::renderSettings() {
             updateRenderSettings(swapRenderer); // Update all open editors
         }
 
+        ImGui::EndChild();
+
         if (ImGui::Button("Reset to Defaults")) {
             m_settings = m_settingsDefault;
         }
@@ -1055,6 +1069,18 @@ void Editor::renderSettings() {
             m_settingsOpen = false;
             closedThroughButton = true;
             ImGui::CloseCurrentPopup();
+        }
+
+        const auto avail = ImGui::GetContentRegionAvail();
+        const auto buttonWidth = ImGui::CalcTextSize("Open Config Directory").x + ImGui::GetStyle().FramePadding.x * 2;
+        ImGui::SameLine(0.0f, avail.x - buttonWidth * 2.63f);
+
+        if (ImGui::Button("Open Config Directory")) {
+            const auto path = Application::getConfigPath();
+            if (!std::filesystem::exists(path)) {
+                std::filesystem::create_directories(path);
+            }
+            SDL_OpenURL(("file://" + path.string()).c_str());
         }
 
         ImGui::EndPopup();
