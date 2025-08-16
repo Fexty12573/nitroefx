@@ -68,12 +68,9 @@ void Editor::render() {
     windowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar
         | ImGuiDockNodeFlags_NoDockingOverCentralNode
         | ImGuiDockNodeFlags_NoUndocking;
-        ImGui::SetNextWindowClass(&windowClass);
 
-    ImGui::Begin("Work Area##Editor", nullptr,
-        // ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoDecoration
-    );
+    ImGui::SetNextWindowClass(&windowClass);
+    ImGui::Begin("Work Area##Editor", nullptr, ImGuiWindowFlags_NoDecoration);
 
     std::vector<std::shared_ptr<EditorInstance>> toClose;
     if (ImGui::BeginTabBar("Editor Instances", ImGuiTabBarFlags_Reorderable 
