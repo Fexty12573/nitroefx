@@ -8,6 +8,8 @@
 
 struct ApplicationSettings {
     std::map<u32, Keybind> keybinds;
+    bool checkForUpdates;
+    bool showReleaseCandidates;
 
     static ApplicationSettings getDefault();
 };

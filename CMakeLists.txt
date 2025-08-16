@@ -18,6 +18,8 @@ find_package(glm CONFIG REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(implot CONFIG REQUIRED)
 find_package(SPNG CONFIG REQUIRED)
+find_package(CURL CONFIG REQUIRED)
+find_package(LibArchive REQUIRED)
 add_subdirectory(external/narc)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
@@ -70,6 +72,8 @@ target_link_libraries(nitroefx PRIVATE
     implot::implot
     spng::spng_static
     libnarc_static
+    CURL::libcurl_static
+    LibArchive::LibArchive
     ${IMAGEQUANT_LIB})
 
 if (WIN32)

@@ -18,6 +18,8 @@ ApplicationSettings ApplicationSettings::getDefault() {
             { ApplicationAction::PlayAllEmitters, { KeybindType::Key, { SDLK_A, SDL_KMOD_CTRL } } },
             { ApplicationAction::KillEmitters, { KeybindType::Key, { SDLK_K, SDL_KMOD_CTRL } } },
             { ApplicationAction::ResetCamera, { KeybindType::Key, { SDLK_R, SDL_KMOD_CTRL } } }
-        }
+        },
+        .checkForUpdates = true,
+        .showReleaseCandidates = false
     };
 };

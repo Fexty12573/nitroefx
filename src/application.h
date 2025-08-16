@@ -10,7 +10,37 @@
 
 #include <optional>
 #include <set>
+#include <filesystem>
+#include <unordered_map>
+#include <span>
 
+struct AppVersion {
+    int major;
+    int minor;
+    int patch;
+    bool isRC;
+    int rc;
+    std::string str;
+};
+
+struct HttpCacheEntry {
+    std::string etag;
+    std::string lastModified;
+    std::string body;
+};
+
+struct HttpResponse {
+    long status;
+    std::string body;
+    std::unordered_map<std::string, std::string> headers;
+};
+
+struct VersionCheckResult {
+    bool ok;
+    bool updateAvailable;
+    std::string remoteTag;
+    bool remoteIsRC;
+};
 
 class Application {
 public:
@@ -35,8 +65,13 @@ public:
 
     static std::filesystem::path getConfigPath();
     static std::filesystem::path getTempPath();
+    static std::filesystem::path getExecutablePath();
 
-    static constexpr auto VERSION = "v1.0.0";
+    static std::optional<AppVersion> parseVersion(const std::string& versionStr);
+
+    static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
+
+    static constexpr auto VERSION = "v1.1.0-rc1";
 
 private:
     void pollEvents();
@@ -47,6 +82,7 @@ private:
     void renderPreferences();
     void renderPerformanceWindow();
     void renderAboutWindow();
+    void renderUpdateWindow();
     void setColors();
     void loadFonts();
     void loadConfig();
@@ -58,8 +94,30 @@ private:
 
     void tryOpenEditor(const std::filesystem::path& path);
 
-    // Initialize a default docking layout if no ImGui ini file exists
     void initDefaultDockingLayout();
+
+    // Update checking
+    bool isVersionNewer(const AppVersion& current, const AppVersion& other) const;
+    nlohmann::json loadCache();
+    void saveCache(const nlohmann::json& cache);
+    std::optional<HttpResponse> getWithCache(const std::string& url, const std::string& cacheKey);
+    std::optional<AppVersion> getNewestVersion(std::span<const AppVersion> versions);
+    VersionCheckResult checkForUpdates();
+
+    std::optional<AppVersion> findLatestVersion();
+
+    static size_t writeBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
+    static size_t writeHeaderCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
+    static size_t writeFileCallback(char* ptr, size_t sz, size_t nm, void* ud);
+
+    // Updating
+    void applyUpdateNow(const std::filesystem::path& binaryPath, bool relaunch);
+    std::filesystem::path downloadLatestArchive();
+    std::filesystem::path extractLatestArchive(const std::filesystem::path& archive);
+
+    std::optional<nlohmann::json> getUpdateAsset(const std::string& tag);
+    bool downloadToFile(const std::string& url, const std::string& outPath);
+    bool extractSingleFile(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath);
 
 private:
     bool m_running = true;
@@ -73,11 +131,15 @@ private:
     std::map<std::string, ImFont*> m_fonts;
 
     std::string m_iniFilename;
-    
+
+    VersionCheckResult m_versionCheckResult;
+    bool m_updateOnClose = false;
+
     ApplicationSettings m_settings;
     std::vector<u32> m_sortedActions;
     int m_preferencesWindowId = 0;
     int m_aboutWindowId = 0;
+    int m_updateWindowId = 0;
     bool m_preferencesOpen = false;
     bool m_aboutWindowOpen = false;
     bool m_listeningForInput = false;
@@ -91,6 +153,9 @@ private:
 
     // Tracks whether we've already attempted to initialize the layout
     bool m_layoutInitialized = false;
+
+    std::string m_downloadedArchivePath;
+    std::string m_extractedBinaryPath;
 };
 
 inline Application* g_application = nullptr;

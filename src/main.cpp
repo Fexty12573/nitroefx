@@ -3,7 +3,6 @@
 #include <argparse/argparse.hpp>
 #include <spdlog/spdlog.h>
 
-
 int nitroefx_main(int argc, char** argv) {
     // -- GUI Mode
     // $ nitroefx
@@ -21,8 +20,10 @@ int nitroefx_main(int argc, char** argv) {
     argparse::ArgumentParser program("nitroefx");
     
     // Optional path for GUI mode
-    program.add_argument("path")
-           .help("Optional path for GUI mode");
+    //program.add_argument("path").help("Optional path for GUI mode");
+
+    program.add_argument("--apply-update").nargs(3);
+    program.add_argument("--relaunch").default_value(false).implicit_value(true);
 
     // Subcommand for CLI
     argparse::ArgumentParser cli("cli", "Command Line Interface for nitroefx");
@@ -42,6 +43,17 @@ int nitroefx_main(int argc, char** argv) {
         std::exit(1);
     }
 
+    if (program.is_used("--apply-update")) {
+        const auto args = program.get<std::vector<std::string>>("--apply-update");
+
+        const auto srcPath = std::filesystem::path(args[0]);
+        const auto dstPath = std::filesystem::path(args[1]);
+        const auto parentPid = std::stoul(args[2]);
+        const auto relaunch = program.get<bool>("--relaunch");
+
+        return Application::update(srcPath, dstPath, parentPid, relaunch);
+    }
+
     Application app;
     if (program.is_subcommand_used("cli")) {
         return app.runCli(cli);
@@ -49,4 +61,3 @@ int nitroefx_main(int argc, char** argv) {
         return app.run(argc, argv);
     }
 }
-

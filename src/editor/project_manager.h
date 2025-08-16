@@ -91,6 +91,12 @@ public:
 
     void handleEvent(const SDL_Event& event);
 
+    bool hasUnsavedEditors() const {
+        return std::ranges::any_of(m_openEditors, [](const auto& editor) {
+            return editor->isModified();
+        });
+    }
+
     std::span<const std::shared_ptr<EditorInstance>> getUnsavedEditors() {
         return m_unsavedEditors;
     }

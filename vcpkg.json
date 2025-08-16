@@ -16,6 +16,8 @@
     "implot",
     "nlohmann-json",
     "argparse",
-    "libspng"
+    "libspng",
+    "curl",
+    "libarchive"
 ]
 }

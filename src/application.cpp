@@ -2,6 +2,7 @@
 #include "fonts/IconsFontAwesome6.h"
 #include "imgui/extensions.h"
 
+#include <curl/curl.h>
 #include <SDL3/SDL.h>
 #include <GL/glew.h>
 #include <SDL3/SDL_opengl.h>
@@ -11,8 +12,13 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 #include <nlohmann/json.hpp>
+#include <archive.h>
+#include <archive_entry.h>
 #include <chrono>
+#include <ranges>
+#include <regex>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -138,6 +144,8 @@ int Application::run(int argc, char** argv) {
     loadFonts();
     setColors();
 
+    m_versionCheckResult = checkForUpdates();
+
     // loadConfig might change the window size so we create the window
     // in a hidden state and show it after loading the config
     SDL_ShowWindow(m_window);
@@ -147,6 +155,7 @@ int Application::run(int argc, char** argv) {
 
     m_preferencesWindowId = ImHashStr("Preferences##Application");
     m_aboutWindowId = ImHashStr("About##Application");
+    m_updateWindowId = ImHashStr("Update##Application");
 
     if (argc > 1) {
         const std::filesystem::path arg = argv[1];
@@ -201,6 +210,8 @@ int Application::run(int argc, char** argv) {
             renderAboutWindow();
         }
 
+        renderUpdateWindow();
+
         ImGui::Render();
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
         glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
@@ -218,6 +229,12 @@ int Application::run(int argc, char** argv) {
         SDL_GL_SwapWindow(m_window);
         lastFrame = now;
     }
+
+    if (m_updateOnClose) {
+        const auto archivePath = downloadLatestArchive();
+        const auto binaryPath = extractLatestArchive(archivePath);
+        applyUpdateNow(binaryPath, false);
+    } 
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
@@ -626,6 +643,14 @@ void Application::renderMenuBar() {
             ImGui::EndMenu();
         }
 
+        if (m_versionCheckResult.updateAvailable) {
+            if (ImGui::IconButton(ICON_FA_ARROW_UP, "Update Available", IM_COL32(35, 209, 139, 255))) {
+                ImGui::PushOverrideID(m_updateWindowId);
+                ImGui::OpenPopup("Update Available");
+                ImGui::PopID();
+            }
+        }
+
         ImGui::EndMainMenuBar();
     }
 
@@ -715,6 +740,11 @@ void Application::renderPreferences() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
 
     if (ImGui::BeginPopupModal("Preferences##Application", &m_preferencesOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SeparatorText("Updates");
+
+        ImGui::Checkbox("Check for updates on startup", &m_settings.checkForUpdates);
+        ImGui::Checkbox("Include pre-release versions", &m_settings.showReleaseCandidates);
+
         ImGui::SeparatorText("Keybinds");
 
         if (ImGui::BeginTable("Keybinds##Application", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH)) {
@@ -810,6 +840,62 @@ void Application::renderAboutWindow() {
         ImGui::Text("A particle editor for the Nintendo DS Pokémon games.");
         ImGui::Text("Created by Fexty12573");
         ImGui::TextLinkOpenURL("https://github.com/Fexty12573/nitroefx");
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopID();
+}
+
+void Application::renderUpdateWindow() {
+    ImGui::PushOverrideID(m_updateWindowId);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
+
+    if (ImGui::BeginPopup("Update Available", ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("A new version of NitroEFX is available!");
+        ImGui::Text("Current version: %s", Application::VERSION);
+        ImGui::Text("Latest version: %s", m_versionCheckResult.remoteTag.c_str());
+
+        ImGui::Separator();
+
+        if (ImGui::IconButton(ICON_FA_DOWNLOAD, "Update Now", IM_COL32(35, 209, 139, 255), !g_projectManager->hasUnsavedEditors())) {
+            ImGui::CloseCurrentPopup();
+            m_versionCheckResult.updateAvailable = false;
+
+            const auto archivePath = downloadLatestArchive();
+            const auto binaryPath = extractLatestArchive(archivePath);
+            applyUpdateNow(binaryPath, true);
+        }
+
+        if (g_projectManager->hasUnsavedEditors()) {
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::Text("You have unsaved changes in your editors.");
+                ImGui::Text("Please save or close them before updating.");
+                ImGui::EndTooltip();
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::IconButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET, "Update on Exit", IM_COL32(143, 228, 143, 255))) {
+            ImGui::CloseCurrentPopup();
+            m_versionCheckResult.updateAvailable = false;
+            m_updateOnClose = true;
+        }
+
+        if (ImGui::BeginItemTooltip()) {
+            ImGui::Text("This will download and apply the update when you exit NitroEFX.");
+            ImGui::EndTooltip();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::IconButton(ICON_FA_CLOCK_ROTATE_LEFT, "Remind Me Later", IM_COL32(255, 221, 93, 255))) {
+           ImGui::CloseCurrentPopup();
+           m_versionCheckResult.updateAvailable = false;
+        }
 
         ImGui::EndPopup();
     }
@@ -1031,6 +1117,9 @@ void Application::loadConfig() {
         }
     }
 
+    m_settings.checkForUpdates = config.value("checkForUpdates", m_settings.checkForUpdates);
+    m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
+
     m_editor->loadConfig(config);
 }
 
@@ -1105,6 +1194,77 @@ void Application::executeAction(u32 action) {
     }
 }
 
+std::optional<AppVersion> Application::parseVersion(const std::string& versionStr) {
+    static const std::regex re(R"(^v(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$)");
+    std::smatch m;
+
+    if (!std::regex_match(versionStr, m, re)) {
+        spdlog::error("Invalid version format: {}", versionStr);
+        return std::nullopt;
+    }
+
+    AppVersion version;
+    version.major = std::stoi(m[1].str());
+    version.minor = std::stoi(m[2].str());
+    version.patch = std::stoi(m[3].str());
+    version.isRC = m[4].matched;
+    version.rc = version.isRC ? std::stoi(m[4].str()) : 0;
+    version.str = versionStr;
+
+    return version;
+}
+
+int Application::update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch) {
+#ifdef _WIN32
+    if (!std::filesystem::exists(dstPath)) {
+        spdlog::error("Destination path does not exist: {}", dstPath.string());
+        return 1;
+    }
+
+    const HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (h) {
+        WaitForSingleObject(h, 60'000);
+        CloseHandle(h);
+    } else {
+        Sleep(1000);
+    }
+
+    const auto srcPathStr = srcPath.string();
+    const auto dstPathStr = dstPath.string();
+
+    int attempt;
+    for (attempt = 0; attempt < 20; attempt++) {
+        if (MoveFileExA(srcPathStr.c_str(), dstPathStr.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH | MOVEFILE_COPY_ALLOWED)) {
+            spdlog::info("Successfully moved update file from {} to {}", srcPathStr, dstPathStr);
+            break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    if (attempt == 20) {
+        spdlog::error("Failed to move update file after 20 attempts: {}", GetLastError());
+        return 1;
+    }
+
+    if (relaunch) {
+        STARTUPINFO si{};
+        si.cb = sizeof(STARTUPINFO);
+
+        PROCESS_INFORMATION pi{};
+
+        auto cmd = fmt::format("\"{}\"", dstPath.string());
+        CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+        if (pi.hProcess) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+    }
+#endif
+
+    return 0;
+}
+
 void Application::saveConfig() {
     const auto configPath = getConfigPath();
     if (!std::filesystem::exists(configPath)) {
@@ -1154,7 +1314,10 @@ void Application::saveConfig() {
         { "h", height },
         { "maximized", !!(SDL_GetWindowFlags(m_window) & SDL_WINDOW_MAXIMIZED) }
     };
-    
+
+    config["checkForUpdates"] = m_settings.checkForUpdates;
+    config["showReleaseCandidates"] = m_settings.showReleaseCandidates;
+
     m_editor->saveConfig(config);
 
     std::ofstream outFile(configFile);
@@ -1263,6 +1426,28 @@ std::filesystem::path Application::getTempPath() {
     return std::filesystem::temp_directory_path() / "nitroefx";
 }
 
+std::filesystem::path Application::getExecutablePath() {
+#ifdef _WIN32
+    char buffer[MAX_PATH];
+    if (GetModuleFileNameA(nullptr, buffer, MAX_PATH) == 0) {
+        spdlog::error("Failed to get executable path");
+        return {};
+    }
+
+    return std::filesystem::path(buffer);
+#else
+    char buf[4096];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) {
+        spdlog::error("Failed to get executable path");
+        return {};
+    }
+
+    buf[len] = '\0';
+    return std::filesystem::path(buf);
+#endif
+}
+
 std::string Application::openFile() {
     const char* filters[] = { "*.spa", "*.bin", "*. APS", "*._APS", "*.APS", "*.narc" };
     const char* result = tinyfd_openFileDialog(
@@ -1273,7 +1458,7 @@ std::string Application::openFile() {
         "SPL/NARC Files", 
         false
     );
-
+    
     return result ? result : "";
 }
 
@@ -1369,4 +1554,491 @@ void Application::initDefaultDockingLayout() {
     ImGui::DockBuilderFinish(ImGui::GetID("DockSpace"));
 
     m_layoutInitialized = true;
+}
+
+bool Application::isVersionNewer(const AppVersion& current, const AppVersion& other) const {
+    if (current.major != other.major) return current.major < other.major;
+    if (current.minor != other.minor) return current.minor < other.minor;
+    if (current.patch != other.patch) return current.patch < other.patch;
+    if (current.isRC != other.isRC) return current.isRC && !other.isRC;
+    if (current.isRC) return current.rc < other.rc;
+    return false; // They are equal
+}
+
+nlohmann::json Application::loadCache() {
+    const auto cachePath = getConfigPath() / "cache.json";
+    if (!std::filesystem::exists(cachePath)) {
+        spdlog::info("Cache file does not exist, creating: {}", cachePath.string());
+
+        nlohmann::json cache = nlohmann::json::object();
+
+        std::ofstream outFile(cachePath);
+        outFile << cache.dump(4);
+
+        return cache;
+    }
+
+    std::ifstream inFile(cachePath);
+    if (!inFile) {
+        spdlog::error("Failed to open cache file: {}", cachePath.string());
+        return nlohmann::json::object();
+    }
+
+    nlohmann::json cache;
+    inFile >> cache;
+    
+    return cache;
+}
+
+void Application::saveCache(const nlohmann::json& cache) {
+    const auto cachePath = getConfigPath() / "cache.json";
+    std::ofstream outFile(cachePath);
+    if (!outFile) {
+        spdlog::error("Failed to open cache file for writing: {}", cachePath.string());
+        return;
+    }
+
+    outFile << cache.dump(4);
+}
+
+size_t Application::writeBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    auto* data = static_cast<std::string*>(userdata);
+    data->append(ptr, size * nmemb);
+    return size * nmemb;
+}
+
+size_t Application::writeHeaderCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    auto* map = static_cast<std::unordered_map<std::string, std::string>*>(userdata);
+    const std::string line(ptr, size * nmemb);
+    const auto pos = line.find(':');
+
+    if (pos != std::string::npos) {
+        std::string key = line.substr(0, pos);
+        std::string val = line.substr(pos + 1);
+
+        auto ltrim = [](std::string& s) {
+            s.erase(s.begin(), std::ranges::find_if(s, [](int ch) {
+                return !std::isspace(ch);
+            }));
+        };
+        auto rtrim = [](std::string& s) {
+            s.erase(std::ranges::find_if(std::ranges::reverse_view(s), [](int ch) {
+                return !std::isspace(ch);
+            }).base(), s.end());
+        };
+
+        std::ranges::transform(key, key.begin(), [](unsigned char c) {
+            return std::tolower(c);
+        });
+
+        ltrim(val);
+        auto v = val;
+        rtrim(v);
+
+        (*map)[key] = v;
+    }
+
+    return size * nmemb;
+}
+
+size_t Application::writeFileCallback(char* ptr, size_t sz, size_t nm, void* ud) {
+    const auto fp = static_cast<FILE*>(ud);
+    return std::fwrite(ptr, sz, nm, fp) * sz;
+}
+
+std::optional<HttpResponse> Application::getWithCache(const std::string& url, const std::string& cacheKey) {
+    HttpResponse response;
+    auto cache = loadCache();
+
+    std::string cachedEtag, cachedLM, cachedBody;
+    if (cache.contains(cacheKey)) {
+        const auto& cached = cache[cacheKey];
+        cachedEtag = cached.value<std::string>("etag", "");
+        cachedLM = cached.value<std::string>("last_modified", "");
+        cachedBody = cached.value<std::string>("body", "");
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl) return std::nullopt;
+
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/vnd.github+json");
+    headers = curl_slist_append(headers, "User-Agent: nitroefx-updater/1.0");
+    std::string ifNone; std::string ifSince;
+    if (!cachedEtag.empty()) { ifNone = "If-None-Match: " + cachedEtag; headers = curl_slist_append(headers, ifNone.c_str()); }
+    if (!cachedLM.empty()) { ifSince = "If-Modified-Since: " + cachedLM; headers = curl_slist_append(headers, ifSince.c_str()); }
+
+    response.headers.clear();
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, Application::writeBodyCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response.body);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, Application::writeHeaderCallback);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
+
+    CURLcode rc = curl_easy_perform(curl);
+    if (rc != CURLE_OK) {
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        return std::nullopt;
+    }
+
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    // 304 -> reuse cached body
+    if (response.status == 304) {
+        if (cachedBody.empty()) return std::nullopt; // nothing to use
+        response.body = cachedBody;
+    }
+
+    // Persist fresh cache data on 200
+    if (response.status == 200) {
+        nlohmann::json entry = nlohmann::json::object();
+        if (response.headers.contains("etag")) entry["etag"] = response.headers["etag"];
+        if (response.headers.contains("last-modified")) entry["last_modified"] = response.headers["last-modified"];
+
+        entry["body"] = response.body;
+        cache[cacheKey] = std::move(entry);
+
+        saveCache(cache);
+    }
+
+    return response;
+}
+
+std::optional<AppVersion> Application::getNewestVersion(std::span<const AppVersion> versions) {
+    if (versions.empty()) {
+        spdlog::warn("No versions available to compare.");
+        return std::nullopt;
+    }
+
+    return *std::ranges::max_element(versions, 
+        [this](const AppVersion& a, const AppVersion& b) {
+            return isVersionNewer(a, b);
+    });
+}
+
+VersionCheckResult Application::checkForUpdates() {
+    VersionCheckResult result{};
+    if (!m_settings.checkForUpdates) {
+        spdlog::info("Update check is disabled in settings.");
+
+        result.ok = true;
+        result.updateAvailable = false;
+        return result; // No updates to check
+    }
+
+    const auto localVersion = parseVersion(Application::VERSION);
+    const auto latestVersion = findLatestVersion();
+
+    if (!latestVersion) {
+        spdlog::error("Failed to fetch latest version.");
+        result.ok = false;
+        result.updateAvailable = false;
+        return result; // Error fetching latest version
+    }
+
+    result.ok = true;
+    result.remoteTag = latestVersion->str;
+    result.remoteIsRC = latestVersion->isRC;
+    result.updateAvailable = isVersionNewer(*localVersion, *latestVersion);
+
+    return result;
+}
+
+std::optional<AppVersion> Application::findLatestVersion() {
+    const std::string url = "https://api.github.com/repos/Fexty12573/nitroefx/tags?per_page=100";
+    auto response = getWithCache(url, "Fexty12573/nitroefx/tags");
+    if (!response || (response->status != 200 && response->status != 304)) {
+        spdlog::error("Failed to fetch latest version: HTTP {}", response ? response->status : 0);
+        return std::nullopt;
+    }
+
+    auto j = nlohmann::json::parse(response->body, nullptr, false);
+    if (j.is_discarded() || !j.is_array()) {
+        spdlog::error("Invalid JSON response for tags: {}", response->body);
+        return std::nullopt;
+    }
+
+    std::vector<AppVersion> versions;
+    for (const auto& item : j) {
+        if (!item.is_object()) continue;
+        if (item.value("draft", false)) continue;
+        if (item.value("prerelease", false) && !m_settings.showReleaseCandidates) continue;
+
+        const std::string tag = item.value("name", "");
+
+        auto maybeV = parseVersion(tag);
+        if (maybeV) versions.push_back(*maybeV);
+    }
+
+    return getNewestVersion(versions);
+}
+
+void Application::applyUpdateNow(const std::filesystem::path& binaryPath, bool relaunch) {
+    const auto currentExecutable = getExecutablePath();
+
+#ifdef _WIN32
+    // On Windows, we need to close the application before replacing the executable
+    const auto pid = GetCurrentProcessId();
+
+    const auto updaterExecutable = getTempPath() / "nitroefx-updater.exe";
+    std::filesystem::copy_file(currentExecutable, updaterExecutable, std::filesystem::copy_options::overwrite_existing);
+
+    // Steps:
+    // 1. Launch a new updater process
+    // 2. Close the current application
+    // 3. The updater will replace the executable and then exit
+
+    auto cmd = fmt::format(
+        R"("{}" --apply-update "{}" "{}" {})",
+        updaterExecutable.string(),
+        binaryPath.string(),
+        currentExecutable.string(),
+        pid
+    );
+
+    if (relaunch) {
+        cmd += " --relaunch";
+    }
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(STARTUPINFOA);
+
+    PROCESS_INFORMATION pi{};
+
+    if (!CreateProcessA(
+        nullptr,
+        cmd.data(),
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_NO_WINDOW,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+    )) {
+        spdlog::error("Failed to launch updater process: {}", GetLastError());
+        return;
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+
+    m_running = false;
+
+#else
+    // --- atomic replace & exec on Linux ---
+    // ensure executable bit already set in extractSingleFile
+    // fsync file
+    const auto binaryPathStr = binaryPath.string();
+    const auto targetPathStr = targetPath.string();
+
+    int fd = ::open(binaryPathStr.c_str(), O_RDONLY);
+    if (fd >= 0) {
+        ::fsync(fd);
+        ::close(fd);
+    }
+
+    if (::rename(binaryPathStr.c_str(), targetPathStr.c_str()) != 0) {
+        spdlog::error("rename() failed when installing update");
+        return;
+    }
+
+    std::string dir = std::filesystem::path(targetPathStr).parent_path().string();
+    int dfd = ::open(dir.c_str(), O_DIRECTORY | O_RDONLY);
+    if (dfd >= 0) { ::fsync(dfd); ::close(dfd); }
+
+    // If relaunch is requested, we need to exec the new binary
+    if (relaunch) {
+        // exec new binary with same argv (best-effort: re-use SDL main args)
+        // If you have stored argc/argv, use them; otherwise relaunch with no args:
+        char* const argv0[] = { const_cast<char*>(targetPathStr.c_str()), nullptr };
+        ::execv(targetPathStr.c_str(), argv0);
+
+        spdlog::error("execv failed, manual restart required");
+    }
+#endif
+}
+
+std::filesystem::path Application::downloadLatestArchive() {
+    const auto tag = m_versionCheckResult.remoteTag;
+    const auto asset = getUpdateAsset(tag);
+    if (!asset) {
+        spdlog::error("No download URL found for tag {}", tag);
+        return {};
+    }
+
+    const auto temp = getTempPath();
+    std::filesystem::create_directories(temp);
+
+    // We can assume the asset is valid at this point
+    const auto url = asset->value("browser_download_url", "");
+    auto filename = temp / asset->value("name", "");
+
+    if (!downloadToFile(url, filename.string())) {
+        spdlog::error("Failed to download latest archive for tag {}", tag);
+        return {};
+    }
+
+    return filename;
+}
+
+std::filesystem::path Application::extractLatestArchive(const std::filesystem::path& archive) {
+    if (!std::filesystem::exists(archive)) {
+        spdlog::error("Archive does not exist: {}", archive.string());
+        return {};
+    }
+
+    const auto temp = getTempPath();
+    std::filesystem::create_directories(temp);
+
+#ifdef _WIN32
+    const std::string wantedName = "nitroefx.exe";
+#else
+    const std::string wantedName = "nitroefx";
+#endif
+
+    auto extractedFile = temp / wantedName;
+    if (!extractSingleFile(archive.string(), wantedName, extractedFile)) {
+        spdlog::error("Failed to extract {} from archive {}", wantedName, archive.string());
+        return {};
+    }
+
+    return extractedFile;
+}
+
+std::optional<nlohmann::json> Application::getUpdateAsset(const std::string& tag) {
+    const std::string url = "https://api.github.com/repos/Fexty12573/nitroefx/releases/tags/" + tag;
+    auto resp = getWithCache(url, "Fexty12573/nitroefx/release-" + tag);
+    if (!resp || (resp->status != 200 && resp->status != 304)) {
+        spdlog::error("Failed to get release for tag {}: HTTP {}", tag, resp ? resp->status : 0);
+        return std::nullopt;
+    }
+
+    nlohmann::json j = nlohmann::json::parse(resp->body, nullptr, false);
+    if (j.is_discarded() || !j.is_object() || !j.contains("assets")) {
+        spdlog::error("Invalid release JSON for tag {}", tag);
+        return std::nullopt;
+    }
+
+    const auto& assets = j["assets"];
+    if (!assets.is_array()) return std::nullopt;
+
+#ifdef _WIN32
+    auto looks = [](const std::string& n) {
+        return n.ends_with("windows.zip");
+    };
+#else
+    auto looks = [](const std::string& n) {
+        return n.ends_with("linux.tar.gz");
+    };
+#endif
+
+    for (const auto& a : assets) {
+        const std::string name = a.value("name", "");
+        std::string dlUrl = a.value("browser_download_url", "");
+        if (looks(name) && !dlUrl.empty()) return a;
+    }
+
+    return std::nullopt;
+}
+
+bool Application::downloadToFile(const std::string& url, const std::string& outPath) {
+    FILE* f = std::fopen(outPath.c_str(), "wb");
+    if (!f) {
+        spdlog::error("Failed to open {} for writing", outPath);
+        return false;
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::fclose(f);
+        return false;
+    }
+
+    curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "User-Agent: nitroefx-updater/1.0");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, f);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, Application::writeFileCallback);
+
+    const CURLcode rc = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    std::fclose(f);
+
+    if (rc != CURLE_OK || (status != 200)) {
+        spdlog::error("Download failed: {} (rc={}, http={})", url, (int)rc, status);
+        std::error_code ec;
+        std::filesystem::remove(outPath, ec);
+
+        return false;
+    }
+
+    return true;
+}
+
+bool Application::extractSingleFile(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath) {
+    archive* a = archive_read_new();
+    archive_read_support_filter_all(a);
+    archive_read_support_format_all(a);
+
+    if (archive_read_open_filename(a, archivePath.string().c_str(), 10240) != ARCHIVE_OK) {
+        spdlog::error("archive open failed: {}", archive_error_string(a));
+        archive_read_free(a);
+        return false;
+    }
+
+    archive_entry* entry;
+    bool found = false;
+
+    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+        const char* name = archive_entry_pathname(entry);
+        if (name && wantedName == name) {
+            std::filesystem::create_directories(outPath.parent_path());
+            std::ofstream out(outPath, std::ios::binary);
+            if (!out) {
+                spdlog::error("cannot create {}", outPath.string());
+                archive_read_free(a);
+                return false;
+            }
+
+            const void* buff; size_t size; la_int64_t offset;
+            while (archive_read_data_block(a, &buff, &size, &offset) == ARCHIVE_OK) {
+                out.write(static_cast<const char*>(buff), size);
+            }
+
+            out.close();
+
+#ifndef _WIN32
+            std::filesystem::permissions(outPath,
+                std::filesystem::perms::owner_exec | std::filesystem::perms::owner_read | std::filesystem::perms::owner_write |
+                std::filesystem::perms::group_exec | std::filesystem::perms::group_read |
+                std::filesystem::perms::others_exec | std::filesystem::perms::others_read,
+                std::filesystem::perm_options::add);
+#endif
+
+            found = true;
+            break;
+        }
+
+        archive_read_data_skip(a);
+    }
+
+    archive_read_free(a);
+    if (!found) {
+        spdlog::error("File '{}' not found in archive '{}'", wantedName, archivePath.string());
+    }
+
+    return found;
 }
