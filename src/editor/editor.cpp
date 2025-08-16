@@ -761,12 +761,12 @@ void Editor::renderTextureManager() {
                 ImGui::TableNextColumn(); ImGui::Text("%d", m_tempTexture->channels);
 
                 ImGui::TableNextColumn(); ImGui::Text("Unique Colors");
-                ImGui::TableNextColumn(); ImGui::Text("%" PRIu64, m_tempTexture->suggestedSpec.uniqueColors.size());
+                ImGui::TableNextColumn(); ImGui::Text("%" PRIu64, m_tempTexture->spec.uniqueColors.size());
 
                 ImGui::TableNextColumn(); ImGui::Text("Unique Alphas");
-                ImGui::TableNextColumn(); ImGui::Text("%" PRIu64, m_tempTexture->suggestedSpec.uniqueAlphas.size());
+                ImGui::TableNextColumn(); ImGui::Text("%" PRIu64, m_tempTexture->spec.uniqueAlphas.size());
 
-                const auto estimatedSize = m_tempTexture->suggestedSpec.getSizeEstimate(m_tempTexture->width, m_tempTexture->height);
+                const auto estimatedSize = m_tempTexture->spec.getSizeEstimate(m_tempTexture->width, m_tempTexture->height);
                 ImGui::TableNextColumn(); ImGui::Text("Estimated Size");
                 ImGui::TableNextColumn();
                 if (estimatedSize >= 1024) {
@@ -778,18 +778,27 @@ void Editor::renderTextureManager() {
                 ImGui::TableNextColumn(); ImGui::Text("Format");
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(tableSize.x * 0.5f - style.CellPadding.x * 2);
-                if (ImGui::BeginCombo("##Format", getTextureFormat(m_tempTexture->suggestedSpec.format))) {
+                if (ImGui::BeginCombo("##Format", getTextureFormat(m_tempTexture->spec.format))) {
                     for (auto i = (int)TextureFormat::A3I5; i < (int)TextureFormat::Count; i++) {
                         const auto flags = (TextureFormat)i == TextureFormat::Comp4x4 ? ImGuiSelectableFlags_Disabled : 0;
-                        if (ImGui::Selectable(getTextureFormat((TextureFormat)i), (int)m_tempTexture->suggestedSpec.format == i, flags)) {
-                            m_tempTexture->suggestedSpec.setFormat((TextureFormat)i);
-                            quantizeTexture(
-                                m_tempTexture->data,
-                                m_tempTexture->width,
-                                m_tempTexture->height,
-                                m_tempTexture->suggestedSpec,
-                                m_tempTexture->quantized
-                            );
+                        if (ImGui::Selectable(getTextureFormat((TextureFormat)i), (int)m_tempTexture->spec.format == i, flags)) {
+                            m_tempTexture->spec.setFormat((TextureFormat)i);
+
+                            if (m_tempTexture->spec.format == m_tempTexture->suggestedFormat && m_tempTexture->suggestedFormatUncompressed) {
+                                std::memcpy(
+                                    m_tempTexture->quantized,
+                                    m_tempTexture->data,
+                                    (size_t)m_tempTexture->width * m_tempTexture->height * 4
+                                );
+                            } else {
+                                quantizeTexture(
+                                    m_tempTexture->data,
+                                    m_tempTexture->width,
+                                    m_tempTexture->height,
+                                    m_tempTexture->spec,
+                                    m_tempTexture->quantized
+                                );
+                            }
 
                             m_tempTexture->texture->update(m_tempTexture->quantized);
                         }
@@ -799,10 +808,10 @@ void Editor::renderTextureManager() {
                 }
 
                 ImGui::TableNextColumn(); ImGui::Text("Color Compression");
-                ImGui::TableNextColumn(); ImGui::Text("%s", m_tempTexture->suggestedSpec.requiresColorCompression ? "Yes" : "No");
+                ImGui::TableNextColumn(); ImGui::Text("%s", m_tempTexture->spec.requiresColorCompression ? "Yes" : "No");
 
                 ImGui::TableNextColumn(); ImGui::Text("Alpha Compression");
-                ImGui::TableNextColumn(); ImGui::Text("%s", m_tempTexture->suggestedSpec.requiresAlphaCompression ? "Yes" : "No");
+                ImGui::TableNextColumn(); ImGui::Text("%s", m_tempTexture->spec.requiresAlphaCompression ? "Yes" : "No");
 
                 ImGui::EndTable();
             }
@@ -2393,7 +2402,7 @@ void Editor::openTempTexture(const std::filesystem::path& path, size_t destIndex
 
         std::memcpy(tempTex->quantized, tempTex->data, (size_t)tempTex->width * tempTex->height * 4);
         tempTex->preference = TextureConversionPreference::ColorDepth;
-        tempTex->suggestedSpec = {
+        tempTex->spec = {
             .color0Transparent = true,
             .requiresColorCompression = false,
             .requiresAlphaCompression = false,
@@ -2402,13 +2411,18 @@ void Editor::openTempTexture(const std::filesystem::path& path, size_t destIndex
             .uniqueAlphas = {},
             .flags = TextureAttributes::None,
         };
+        tempTex->suggestedFormat = format;
+        tempTex->suggestedFormatUncompressed = true;
     } else {
         tempTex->preference = TextureConversionPreference::ColorDepth;
-        tempTex->suggestedSpec = SPLTexture::suggestSpecification(tempTex->width, tempTex->height, tempTex->channels, tempTex->data, tempTex->preference);
+        tempTex->spec = SPLTexture::suggestSpecification(tempTex->width, tempTex->height, tempTex->channels, tempTex->data, tempTex->preference);
+        tempTex->suggestedFormat = tempTex->spec.format;
 
-        if (tempTex->suggestedSpec.requiresColorCompression || tempTex->suggestedSpec.requiresAlphaCompression) {
-            quantizeTexture(tempTex->data, tempTex->width, tempTex->height, tempTex->suggestedSpec, tempTex->quantized);
+        if (tempTex->spec.requiresColorCompression || tempTex->spec.requiresAlphaCompression) {
+            tempTex->suggestedFormatUncompressed = false;
+            quantizeTexture(tempTex->data, tempTex->width, tempTex->height, tempTex->spec, tempTex->quantized);
         } else {
+            tempTex->suggestedFormatUncompressed = true;
             std::memcpy(tempTex->quantized, tempTex->data, (size_t)tempTex->width * tempTex->height * 4);
         }
     }
@@ -2456,7 +2470,7 @@ void Editor::importTempTexture() {
     texture.width = m_tempTexture->width;
     texture.height = m_tempTexture->height;
     texture.param = {
-        .format = m_tempTexture->suggestedSpec.format,
+        .format = m_tempTexture->spec.format,
         .s = 1,
         .t = 1,
         .repeat = TextureRepeat::None,
@@ -2477,7 +2491,7 @@ void Editor::importTempTexture() {
         m_tempTexture->quantized,
         m_tempTexture->width,
         m_tempTexture->height,
-        m_tempTexture->suggestedSpec,
+        m_tempTexture->spec,
         textureData,
         paletteData
     );

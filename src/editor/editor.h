@@ -114,7 +114,9 @@ private:
         s32 width;
         s32 height;
         s32 channels;
-        TextureImportSpecification suggestedSpec;
+        TextureFormat suggestedFormat;
+        bool suggestedFormatUncompressed;
+        TextureImportSpecification spec;
         TextureConversionPreference preference;
         std::unique_ptr<GLTexture> texture;
         bool isValidSize;
