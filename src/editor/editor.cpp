@@ -1535,7 +1535,7 @@ bool Editor::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& sp
         ImGui::PopStyleColor();
     }
 
-    NOTIFY(ImGui::SliderAngle("Angle", &spin->angle));
+    NOTIFY(ImGui::SliderAngle("Angle", &spin->angle, -180.0f, 180.0f));
     ImGui::TextUnformatted("Axis");
     ImGui::Indent();
     NOTIFY(ImGui::RadioButton("X", (int*)&spin->axis, 0));

@@ -35,6 +35,11 @@ void SPLMagnetBehavior::apply(SPLParticle& particle, glm::vec3& acceleration, SP
 SPLSpinBehavior::SPLSpinBehavior(const SPLSpinBehaviorNative& native) : SPLBehavior(SPLBehaviorType::Spin) {
     axis = (SPLSpinAxis)native.axis;
     angle = static_cast<f32>(native.angle) / 65535.0f * glm::two_pi<f32>();
+
+    // Normalize the angle to be within the range [-pi, pi]
+    if (angle > glm::pi<f32>()) {
+        angle -= glm::two_pi<f32>();
+    }
 }
 
 void SPLSpinBehavior::apply(SPLParticle& particle, glm::vec3& acceleration, SPLEmitter& emitter, float dt) {

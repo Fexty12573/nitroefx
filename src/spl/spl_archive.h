@@ -108,11 +108,21 @@ private:
 
     template<std::integral T = u16>
     static f32 toAngle(T index) {
-        return static_cast<f32>(index) / 65535.0f * glm::two_pi<f32>();
+        const auto angle = static_cast<f32>(index) / 65535.0f * glm::two_pi<f32>();
+        if (angle > glm::pi<f32>()) {
+            return angle - glm::two_pi<f32>();
+        }
+
+        return angle;
     }
 
     template<std::integral T = u16>
     static T toIndex(f32 angle) {
+        // Normalize the angle to the range [0, 2π)
+        if (angle < 0) {
+            angle += glm::two_pi<f32>();
+        }
+
         return static_cast<T>(angle * 0xFFFF / glm::two_pi<f32>());
     }
 
