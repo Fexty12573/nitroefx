@@ -223,16 +223,7 @@ bool EditorInstance::valueChanged(bool changed) {
     m_modified |= changed;
 
     if (ImGui::IsItemDeactivatedAfterEdit()) {
-        const auto after = m_archive.getResources().at(m_selectedResource).duplicate();
-
-        m_history.push({
-            .type = EditorActionType::ResourceModify,
-            .resourceIndex = m_selectedResource,
-            .before = m_resourceBefore,
-            .after = after
-        });
-
-        m_resourceBefore = after.duplicate();
+        pushHistory();
     }
 
     return changed;
@@ -306,6 +297,23 @@ void EditorInstance::saveAs(const std::filesystem::path& path) {
     m_path = path;
     m_narcIndex = -1; // Reset NARC index since we're saving to a new file
     return save();
+}
+
+void EditorInstance::pushHistory() {
+    if (m_selectedResource >= m_archive.getResources().size()) {
+        return;
+    }
+
+    const auto after = m_archive.getResources().at(m_selectedResource).duplicate();
+
+    m_history.push({
+        .type = EditorActionType::ResourceModify,
+        .resourceIndex = m_selectedResource,
+        .before = m_resourceBefore,
+        .after = after
+    });
+
+    m_resourceBefore = after.duplicate();
 }
 
 EditorActionType EditorInstance::undo() {

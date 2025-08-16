@@ -26,6 +26,7 @@
 #define LOCKED_EDITOR() activeEditor_locked
 #define LOCK_EDITOR() auto LOCKED_EDITOR() = m_activeEditor.lock()
 #define NOTIFY(action) LOCKED_EDITOR()->valueChanged(action)
+#define PUSH_HISTORY() LOCKED_EDITOR()->pushHistory()
 #define HELP(name) helpPopup(help::name)
 
 
@@ -1998,7 +1999,7 @@ void Editor::renderChildrenEditor(SPLResource& res) {
 
     if (!res.childResource) {
         ImGui::TextUnformatted("This resource does not have an associated child resource.");
-        if (ImGui::Button("Add Child Resource")) {
+        if (ImGui::IconButton(ICON_FA_PLUS, "Add Child Resource", IM_COL32(143, 228, 143, 255))) {
             res.header.flags.hasChildResource = true;
             res.childResource = SPLChildResource{
                 .flags = {
@@ -2030,6 +2031,8 @@ void Editor::renderChildrenEditor(SPLResource& res) {
                     .dpolFaceEmitter = false
                 }
             };
+
+            PUSH_HISTORY();
         }
 
         return;
@@ -2037,6 +2040,13 @@ void Editor::renderChildrenEditor(SPLResource& res) {
 
     auto& child = res.childResource.value();
     constexpr f32 frameTime = 1.0f / (f32)SPLArchive::SPL_FRAMES_PER_SECOND;
+
+    if (NOTIFY(ImGui::IconButton(ICON_FA_XMARK, "Remove Child Resource", IM_COL32(245, 87, 98, 255)))) {
+        res.header.flags.hasChildResource = false;
+        res.childResource.reset();
+        PUSH_HISTORY();
+        return;
+    }
 
     bool open = ImGui::TreeNodeEx("##parentSettings", ImGuiTreeNodeFlags_SpanAvailWidth);
     ImGui::SameLine();

@@ -52,6 +52,8 @@ public:
     void save();
     void saveAs(const std::filesystem::path& path);
 
+    void pushHistory();
+
     bool canUndo() const {
         return m_history.canUndo();
     }
