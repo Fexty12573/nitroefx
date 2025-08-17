@@ -1,4 +1,8 @@
 #include "gl_texture.h"
+
+#include <array>
+#include <set>
+
 #include "spl/spl_resource.h"
 #include "gl_util.h"
 
@@ -100,6 +104,40 @@ void GLTexture::update(const void* rgba) {
     ));
 }
 
+#define S_OR_ST(FLIP) ((FLIP) == TextureFlip::S || (FLIP) == TextureFlip::ST)
+#define T_OR_ST(FLIP) ((FLIP) == TextureFlip::T || (FLIP) == TextureFlip::ST)
+
+void GLTexture::setWrapping(TextureRepeat repeat, TextureFlip flip) {
+    bind();
+
+    GLint s = GL_CLAMP_TO_EDGE;
+    GLint t = GL_CLAMP_TO_EDGE;
+
+    switch (repeat) {
+    case TextureRepeat::None:
+        s = GL_CLAMP_TO_EDGE;
+        t = GL_CLAMP_TO_EDGE;
+        break;
+    case TextureRepeat::S:
+        s = S_OR_ST(flip) ? GL_MIRRORED_REPEAT : GL_REPEAT;
+        break;
+    case TextureRepeat::T:
+        t = T_OR_ST(flip) ? GL_MIRRORED_REPEAT : GL_REPEAT;
+        break;
+    case TextureRepeat::ST:
+        s = S_OR_ST(flip) ? GL_MIRRORED_REPEAT : GL_REPEAT;
+        t = T_OR_ST(flip) ? GL_MIRRORED_REPEAT : GL_REPEAT;
+        break;
+    }
+
+    glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, s));
+    glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, t));
+    glCall(glBindTexture(GL_TEXTURE_2D, 0));
+}
+
+#undef S_OR_ST
+#undef T_OR_ST
+
 void GLTexture::createTexture(const SPLTexture& texture) {
 
     // Texture creation is a 2 step process. First the texture/palette data must be converted
@@ -115,16 +153,7 @@ void GLTexture::createTexture(const SPLTexture& texture) {
 
     glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-    glCall(glTexParameteri(
-        GL_TEXTURE_2D,
-        GL_TEXTURE_WRAP_S,
-        repeat == TextureRepeat::S || repeat == TextureRepeat::ST ? GL_MIRRORED_REPEAT : GL_CLAMP_TO_EDGE
-    ));
-    glCall(glTexParameteri(
-        GL_TEXTURE_2D,
-        GL_TEXTURE_WRAP_T,
-        repeat == TextureRepeat::T || repeat == TextureRepeat::ST ? GL_MIRRORED_REPEAT : GL_CLAMP_TO_EDGE
-    ));
+    setWrapping(repeat, texture.param.flip);
 
     // Required for glTextureView (see spl_archive.cpp)
     glCall(glTexStorage2D(

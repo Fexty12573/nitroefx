@@ -736,6 +736,7 @@ void Editor::renderTextureManager() {
                     for (const auto [val, name] : detail::g_textureRepeatNames) {
                         if (editor->valueChanged(ImGui::Selectable(name, texture.param.repeat == val))) {
                             texture.param.repeat = val;
+                            texture.glTexture->setWrapping(texture.param.repeat, texture.param.flip);
                         }
                     }
 
@@ -746,6 +747,7 @@ void Editor::renderTextureManager() {
                     for (const auto [val, name] : detail::g_textureFlipNames) {
                         if (editor->valueChanged(ImGui::Selectable(name, texture.param.flip == val))) {
                             texture.param.flip = val;
+                            texture.glTexture->setWrapping(texture.param.repeat, texture.param.flip);
                         }
                     }
 
