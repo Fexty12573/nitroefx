@@ -23,6 +23,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <ShObjIdl.h>
+#else
+#include <fcntl.h>
 #endif
 #include <tinyfiledialogs.h>
 
@@ -1832,11 +1834,8 @@ void Application::applyUpdateNow(const std::filesystem::path& binaryPath, bool r
     m_running = false;
 
 #else
-    // --- atomic replace & exec on Linux ---
-    // ensure executable bit already set in extractSingleFile
-    // fsync file
     const auto binaryPathStr = binaryPath.string();
-    const auto targetPathStr = targetPath.string();
+    const auto targetPathStr = currentExecutable.string();
 
     int fd = ::open(binaryPathStr.c_str(), O_RDONLY);
     if (fd >= 0) {
