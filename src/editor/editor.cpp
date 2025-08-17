@@ -729,9 +729,6 @@ void Editor::renderTextureManager() {
             if (open) {
                 ImGui::Text("Format: %s", getTextureFormat(texture.param.format));
 
-                // ImGui::InputScalar("S", ImGuiDataType_U8, &texture.param.s);
-                // ImGui::InputScalar("T", ImGuiDataType_U8, &texture.param.t);
-                
                 if (ImGui::BeginCombo("Repeat", getTextureRepeat(texture.param.repeat))) {
                     for (const auto [val, name] : detail::g_textureRepeatNames) {
                         if (editor->valueChanged(ImGui::Selectable(name, texture.param.repeat == val))) {
@@ -754,7 +751,10 @@ void Editor::renderTextureManager() {
                     ImGui::EndCombo();
                 }
 
-                editor->valueChanged(ImGui::Checkbox("Palette Color 0 Transparent", &texture.param.palColor0Transparent));
+                if (editor->valueChanged(ImGui::Checkbox("Palette Color 0 Transparent", &texture.param.palColor0Transparent))) {
+                    texture.glTexture->update(texture);
+                }
+
                 editor->valueChanged(ImGui::Checkbox("Use Shared Texture", &texture.param.useSharedTexture));
 
                 if (texture.param.useSharedTexture) {

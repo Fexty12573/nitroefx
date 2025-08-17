@@ -104,6 +104,31 @@ void GLTexture::update(const void* rgba) {
     ));
 }
 
+void GLTexture::update(const SPLTexture& texture) {
+    if (m_width != texture.width || m_height != texture.height) {
+        spdlog::error("Texture size mismatch: expected {}x{}, got {}x{}",
+            m_width, m_height, texture.width, texture.height);
+        return;
+    }
+
+    bind();
+
+    setWrapping(texture.param.repeat, texture.param.flip);
+
+    const auto textureData = toRGBA(texture);
+    glCall(glTexSubImage2D(
+        GL_TEXTURE_2D,
+        0,
+        0,
+        0,
+        (s32)m_width,
+        (s32)m_height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        textureData.data()
+    ));
+}
+
 #define S_OR_ST(FLIP) ((FLIP) == TextureFlip::S || (FLIP) == TextureFlip::ST)
 #define T_OR_ST(FLIP) ((FLIP) == TextureFlip::T || (FLIP) == TextureFlip::ST)
 
@@ -132,7 +157,6 @@ void GLTexture::setWrapping(TextureRepeat repeat, TextureFlip flip) {
 
     glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, s));
     glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, t));
-    glCall(glBindTexture(GL_TEXTURE_2D, 0));
 }
 
 #undef S_OR_ST

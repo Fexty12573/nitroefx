@@ -27,6 +27,7 @@ public:
     TextureFormat getFormat() const { return m_format; }
 
     void update(const void* rgba);
+    void update(const SPLTexture& texture);
     void setWrapping(TextureRepeat repeat, TextureFlip flip);
 
 private:
