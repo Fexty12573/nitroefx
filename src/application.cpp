@@ -1,4 +1,5 @@
 #include "application.h"
+#include "application_colors.h"
 #include "fonts/IconsFontAwesome6.h"
 #include "imgui/extensions.h"
 
@@ -470,7 +471,7 @@ void Application::renderMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::BeginMenu("New")) {
-                if (ImGui::MenuItemIcon(ICON_FA_FOLDER_PLUS, "Project", "Ctrl+Shift+N", false, IM_COL32(157, 142, 106, 255))) {
+                if (ImGui::MenuItemIcon(ICON_FA_FOLDER_PLUS, "Project", "Ctrl+Shift+N", false, AppColors::DarkBeige)) {
                     spdlog::warn("New Project not implemented");
                 }
 
@@ -482,7 +483,7 @@ void Application::renderMenuBar() {
             }
 
             if (ImGui::BeginMenu("Open")) {
-                if (ImGui::MenuItemIcon(ICON_FA_FOLDER_OPEN, "Project", KEYBINDSTR(OpenProject), false, IM_COL32(157, 142, 106, 255))) {
+                if (ImGui::MenuItemIcon(ICON_FA_FOLDER_OPEN, "Project", KEYBINDSTR(OpenProject), false, AppColors::DarkBeige)) {
                     const auto path = openDirectory();
                     if (!path.empty()) {
                         addRecentProject(path);
@@ -524,11 +525,11 @@ void Application::renderMenuBar() {
                 ImGui::EndMenu();
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save", KEYBINDSTR(Save), false, IM_COL32(105, 190, 255, 255), hasActiveEditor)) {
+            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save", KEYBINDSTR(Save), false, AppColors::LightBlue, hasActiveEditor)) {
                 m_editor->save();
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save As...", nullptr, false, IM_COL32(105, 190, 255, 255), hasActiveEditor)) {
+            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save As...", nullptr, false, AppColors::LightBlue, hasActiveEditor)) {
                 const auto path = saveFile();
                 if (!path.empty()) {
                     m_editor->saveAs(path);
@@ -536,7 +537,7 @@ void Application::renderMenuBar() {
                 }
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save All", KEYBINDSTR(SaveAll), false, IM_COL32(105, 190, 255, 255), hasOpenEditors)) {
+            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save All", KEYBINDSTR(SaveAll), false, AppColors::LightBlue, hasOpenEditors)) {
                 g_projectManager->saveAllEditors();
             }
 
@@ -568,19 +569,19 @@ void Application::renderMenuBar() {
                 m_editor->redo();
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_PLAY, "Play Emitter", KEYBINDSTR(PlayEmitter), false, IM_COL32(143, 228, 143, 255), hasActiveEditor)) {
+            if (ImGui::MenuItemIcon(ICON_FA_PLAY, "Play Emitter", KEYBINDSTR(PlayEmitter), false, AppColors::LightGreen, hasActiveEditor)) {
                 m_editor->playEmitter(EmitterSpawnType::SingleShot);
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_REPEAT, "Play Looped Emitter", KEYBINDSTR(PlayEmitterLooped), false, IM_COL32(133, 208, 133, 255), hasActiveEditor)) {
+            if (ImGui::MenuItemIcon(ICON_FA_REPEAT, "Play Looped Emitter", KEYBINDSTR(PlayEmitterLooped), false, AppColors::LightGreen2, hasActiveEditor)) {
                 m_editor->playEmitter(EmitterSpawnType::Looped);
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_PLAY, "Play All Emitters", KEYBINDSTR(PlayAllEmitters), false, IM_COL32(143, 228, 143, 255), hasActiveEditor)) {
+            if (ImGui::MenuItemIcon(ICON_FA_PLAY, "Play All Emitters", KEYBINDSTR(PlayAllEmitters), false, AppColors::LightGreen, hasActiveEditor)) {
                 m_editor->playAllEmitters(EmitterSpawnType::SingleShot);
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_STOP, "Kill Emitters", KEYBINDSTR(KillEmitters), false, IM_COL32(245, 87, 98, 255), hasActiveEditor)) {
+            if (ImGui::MenuItemIcon(ICON_FA_STOP, "Kill Emitters", KEYBINDSTR(KillEmitters), false, AppColors::LightRed, hasActiveEditor)) {
                 m_editor->killEmitters();
             }
 
@@ -626,15 +627,15 @@ void Application::renderMenuBar() {
         }
 
         if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItemIcon(ICON_FA_CODE_BRANCH, "GitHub Repository", nullptr, false, IM_COL32(255, 221, 93, 255))) {
+            if (ImGui::MenuItemIcon(ICON_FA_CODE_BRANCH, "GitHub Repository", nullptr, false, AppColors::Yellow)) {
                 SDL_OpenURL("https://github.com/Fexty12573/nitroefx");
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_BUG, "Report Issue", nullptr, false, IM_COL32(255, 93, 93, 255))) {
+            if (ImGui::MenuItemIcon(ICON_FA_BUG, "Report Issue", nullptr, false, AppColors::Red)) {
                 SDL_OpenURL("https://github.com/Fexty12573/nitroefx/issues/new");
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_CIRCLE_INFO, "About NitroEFX", nullptr, false, IM_COL32(93, 171, 231, 255))) {
+            if (ImGui::MenuItemIcon(ICON_FA_CIRCLE_INFO, "About NitroEFX", nullptr, false, AppColors::LightBlue2)) {
                 ImGui::PushOverrideID(m_aboutWindowId);
                 ImGui::OpenPopup("About NitroEFX");
                 ImGui::PopID();
@@ -646,7 +647,7 @@ void Application::renderMenuBar() {
         }
 
         if (m_versionCheckResult.updateAvailable) {
-            if (ImGui::IconButton(ICON_FA_ARROW_UP, "Update Available", IM_COL32(35, 209, 139, 255))) {
+            if (ImGui::IconButton(ICON_FA_ARROW_UP, "Update Available", AppColors::Turquoise)) {
                 ImGui::PushOverrideID(m_updateWindowId);
                 ImGui::OpenPopup("Update Available");
                 ImGui::PopID();
@@ -664,8 +665,8 @@ void Application::renderMenuBar() {
     constexpr ImVec2 size = { itemHeight, itemHeight };
 
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(79, 79, 79, 200));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(90, 90, 90, 255));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AppColors::DarkGray);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, AppColors::DarkGray2);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5f, 0.5f });
     ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 4.0f); // Cut item spacing in half
@@ -681,7 +682,7 @@ void Application::renderMenuBar() {
                 }
             }
 
-            if (ImGui::IconButton(ICON_FA_FOLDER_OPEN, size, IM_COL32(157, 142, 106, 255))) {
+            if (ImGui::IconButton(ICON_FA_FOLDER_OPEN, size, AppColors::DarkBeige)) {
                 const auto project = openDirectory();
                 if (!project.empty()) {
                     addRecentProject(project);
@@ -691,7 +692,7 @@ void Application::renderMenuBar() {
 
             ImGui::VerticalSeparator(itemHeight);
 
-            if (ImGui::IconButton(ICON_FA_FLOPPY_DISK, size, IM_COL32(105, 190, 255, 255), hasActiveEditor)) {
+            if (ImGui::IconButton(ICON_FA_FLOPPY_DISK, size, AppColors::LightBlue, hasActiveEditor)) {
                 m_editor->save();
             }
 
@@ -707,15 +708,15 @@ void Application::renderMenuBar() {
             
             ImGui::VerticalSeparator(itemHeight);
 
-            if (ImGui::IconButton(ICON_FA_PLAY, size, IM_COL32(143, 228, 143, 255), hasActiveEditor)) {
+            if (ImGui::IconButton(ICON_FA_PLAY, size, AppColors::LightGreen, hasActiveEditor)) {
                 m_editor->playEmitter(EmitterSpawnType::SingleShot);
             }
 
-            if (ImGui::IconButton(ICON_FA_REPEAT, size, IM_COL32(133, 208, 133, 255), hasActiveEditor)) {
+            if (ImGui::IconButton(ICON_FA_REPEAT, size, AppColors::LightGreen2, hasActiveEditor)) {
                 m_editor->playEmitter(EmitterSpawnType::Looped);
             }
 
-            if (ImGui::IconButton(ICON_FA_STOP, size, IM_COL32(245, 87, 98, 255), hasActiveEditor)) {
+            if (ImGui::IconButton(ICON_FA_STOP, size, AppColors::LightRed, hasActiveEditor)) {
                 m_editor->killEmitters();
             }
 
@@ -862,7 +863,7 @@ void Application::renderUpdateWindow() {
 
         ImGui::Separator();
 
-        if (ImGui::IconButton(ICON_FA_DOWNLOAD, "Update Now", IM_COL32(35, 209, 139, 255), !g_projectManager->hasUnsavedEditors())) {
+        if (ImGui::IconButton(ICON_FA_DOWNLOAD, "Update Now", AppColors::Turquoise, !g_projectManager->hasUnsavedEditors())) {
             ImGui::CloseCurrentPopup();
             m_versionCheckResult.updateAvailable = false;
 
@@ -881,7 +882,7 @@ void Application::renderUpdateWindow() {
 
         ImGui::SameLine();
 
-        if (ImGui::IconButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET, "Update on Exit", IM_COL32(143, 228, 143, 255))) {
+        if (ImGui::IconButton(ICON_FA_ARROW_RIGHT_FROM_BRACKET, "Update on Exit", AppColors::LightGreen)) {
             ImGui::CloseCurrentPopup();
             m_versionCheckResult.updateAvailable = false;
             m_updateOnClose = true;
@@ -894,7 +895,7 @@ void Application::renderUpdateWindow() {
 
         ImGui::SameLine();
 
-        if (ImGui::IconButton(ICON_FA_CLOCK_ROTATE_LEFT, "Remind Me Later", IM_COL32(255, 221, 93, 255))) {
+        if (ImGui::IconButton(ICON_FA_CLOCK_ROTATE_LEFT, "Remind Me Later", AppColors::Yellow)) {
            ImGui::CloseCurrentPopup();
            m_versionCheckResult.updateAvailable = false;
         }

@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "application.h"
+#include "application_colors.h"
 #include "project_manager.h"
 #include "spl/enum_names.h"
 #include "help_messages.h"
@@ -209,9 +210,9 @@ void Editor::renderToolbar(float itemHeight) {
 
     constexpr float framePadding = 2.0f;
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { framePadding, framePadding });
-    ImGui::PushStyleColor(ImGuiCol_Header, m_settings.useFixedDsResolution ? IM_COL32(79, 79, 79, 200) : 0);
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(79, 79, 79, 200));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(90, 90, 90, 255));
+    ImGui::PushStyleColor(ImGuiCol_Header, m_settings.useFixedDsResolution ? AppColors::DarkGray : 0);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, AppColors::DarkGray);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, AppColors::DarkGray2);
 
     ImVec2 size = { ImGui::CalcTextSize("DS Resolution").x + 2.0f * framePadding, itemHeight };
     ImGui::Selectable("DS Resolution", &m_settings.useFixedDsResolution, ImGuiSelectableFlags_None, size);
@@ -222,9 +223,9 @@ void Editor::renderToolbar(float itemHeight) {
     ImGui::VerticalSeparator(itemHeight);
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { framePadding, framePadding });
-    ImGui::PushStyleColor(ImGuiCol_Header, m_settings.useLegacyParticleRenderer ? IM_COL32(79, 79, 79, 200) : 0);
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(79, 79, 79, 200));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(90, 90, 90, 255));
+    ImGui::PushStyleColor(ImGuiCol_Header, m_settings.useLegacyParticleRenderer ? AppColors::DarkGray : 0);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, AppColors::DarkGray);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, AppColors::DarkGray2);
 
     size = { ImGui::CalcTextSize("Accurate Renderer").x + 2.0f * framePadding, itemHeight };
     ImGui::Selectable("Accurate Renderer", &m_settings.useLegacyParticleRenderer, ImGuiSelectableFlags_None, size);
@@ -652,7 +653,7 @@ void Editor::renderTextureManager() {
         const auto importPopupId = ImGui::GetID("##ImportTexturePopup");
         const auto deleteTexturePopupId = ImGui::GetID("##DeleteTexturePopup");
 
-        if (ImGui::IconButton(ICON_FA_FILE_IMPORT, "Import", IM_COL32(93, 171, 231, 255))) {
+        if (ImGui::IconButton(ICON_FA_FILE_IMPORT, "Import", AppColors::LightBlue)) {
             const auto path = tinyfd_openFileDialog(
                 "Import Texture", 
                 "", 
@@ -669,7 +670,7 @@ void Editor::renderTextureManager() {
 
         ImGui::SameLine();
 
-        if (ImGui::IconButton(ICON_FA_FILE_EXPORT, "Export All...", IM_COL32(255, 221, 93, 255))) {
+        if (ImGui::IconButton(ICON_FA_FILE_EXPORT, "Export All...", AppColors::Yellow)) {
             const auto path = Application::openDirectory("Select Destination");
             if (!path.empty()) {
                 archive.exportTextures(path, Application::getTempPath());
@@ -687,7 +688,7 @@ void Editor::renderTextureManager() {
             const bool open = ImGui::PaddedTreeNode(name.c_str(), padding, ImGuiTreeNodeFlags_SpanAvailWidth);
 
             if (ImGui::BeginPopupContextItem(fmt::format("##TexturePopup{}", i).c_str())) {
-                if (ImGui::MenuItemIcon(ICON_FA_FILE_IMPORT, "Update...", nullptr, false, IM_COL32(93, 171, 231, 255))) {
+                if (ImGui::MenuItemIcon(ICON_FA_FILE_IMPORT, "Update...", nullptr, false, AppColors::LightBlue2)) {
                     const auto path = tinyfd_openFileDialog(
                         "Update Texture",
                         "",
@@ -703,7 +704,7 @@ void Editor::renderTextureManager() {
                     }
                 }
 
-                if (ImGui::MenuItemIcon(ICON_FA_FILE_EXPORT, "Export...", nullptr, false, IM_COL32(255, 221, 93, 255))) {
+                if (ImGui::MenuItemIcon(ICON_FA_FILE_EXPORT, "Export...", nullptr, false, AppColors::Yellow)) {
                     const char* filterPatterns[] = { "*.png", "*.bmp", "*.tga" };
                     const auto path = tinyfd_saveFileDialog(
                         "Export Texture",
@@ -718,7 +719,7 @@ void Editor::renderTextureManager() {
                     }
                 }
 
-                if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, IM_COL32(128, 128, 128, 255))) {
+                if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, AppColors::Gray)) {
                     m_selectedTexture = i;
                     ImGui::OpenPopup(deleteTexturePopupId);
                 }
@@ -940,7 +941,7 @@ void Editor::renderResourceEditor() {
             auto& resource = resources[m_selectedResources[id]];
             const auto& texture = textures[resource.header.misc.textureIndex];
 
-            if (ImGui::IconButton(ICON_FA_PLAY, "Play Emitter", IM_COL32(143, 228, 143, 255))) {
+            if (ImGui::IconButton(ICON_FA_PLAY, "Play Emitter", AppColors::LightGreen)) {
                 playEmitter(m_emitterSpawnType);
             }
 
@@ -954,11 +955,11 @@ void Editor::renderResourceEditor() {
                 ImGui::InputFloat("##Interval", &m_emitterInterval, 0.1f, 1.0f, "%.2fs");
             }
 
-            if (ImGui::IconButton(ICON_FA_PLAY, "Play All Emitters", IM_COL32(143, 228, 143, 255))) {
+            if (ImGui::IconButton(ICON_FA_PLAY, "Play All Emitters", AppColors::LightGreen)) {
                 playAllEmitters(m_emitterSpawnType);
             }
 
-            if (ImGui::IconButton(ICON_FA_STOP, "Kill Emitters", IM_COL32(245, 87, 98, 255))) {
+            if (ImGui::IconButton(ICON_FA_STOP, "Kill Emitters", AppColors::LightRed)) {
                 killEmitters();
             }
 
@@ -1402,7 +1403,7 @@ void Editor::renderBehaviorEditor(SPLResource& res) {
     LOCK_EDITOR();
     std::vector<std::shared_ptr<SPLBehavior>> toRemove;
 
-    if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS, "Add Behavior...", IM_COL32(35, 209, 139, 255))) {
+    if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS, "Add Behavior...", AppColors::Turquoise)) {
         ImGui::OpenPopup("##addBehavior");
     }
 
@@ -1630,7 +1631,7 @@ void Editor::renderAnimationEditor(SPLResource& res) {
 
     LOCK_EDITOR();
 
-    if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS , "Add Animation...", IM_COL32(35, 209, 139, 255))) {
+    if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS , "Add Animation...", AppColors::Turquoise)) {
         ImGui::OpenPopup("##addAnimation");
     }
 
@@ -2021,7 +2022,7 @@ void Editor::renderChildrenEditor(SPLResource& res) {
 
     if (!res.childResource) {
         ImGui::TextUnformatted("This resource does not have an associated child resource.");
-        if (ImGui::IconButton(ICON_FA_PLUS, "Add Child Resource", IM_COL32(143, 228, 143, 255))) {
+        if (ImGui::IconButton(ICON_FA_PLUS, "Add Child Resource", AppColors::Turquoise)) {
             res.header.flags.hasChildResource = true;
             res.childResource = SPLChildResource{
                 .flags = {
@@ -2063,7 +2064,7 @@ void Editor::renderChildrenEditor(SPLResource& res) {
     auto& child = res.childResource.value();
     constexpr f32 frameTime = 1.0f / (f32)SPLArchive::SPL_FRAMES_PER_SECOND;
 
-    if (NOTIFY(ImGui::IconButton(ICON_FA_XMARK, "Remove Child Resource", IM_COL32(245, 87, 98, 255)))) {
+    if (NOTIFY(ImGui::IconButton(ICON_FA_XMARK, "Remove Child Resource", AppColors::LightRed))) {
         res.header.flags.hasChildResource = false;
         res.childResource.reset();
         PUSH_HISTORY();
