@@ -110,11 +110,11 @@ jobs:
       shell: pwsh
       run: |
         $env:Path = ($env:Path -split ';' | Where-Object { $_ -notlike '*Git\\usr\\bin*' }) -join ';'
-        cmake --build build
+        cmake --build build --parallel $env:NUMBER_OF_PROCESSORS
 
     - name: Build (Linux)
       if: matrix.os == 'ubuntu-latest'
-      run: cmake --build build
+      run: cmake --build build --parallel $(nproc)
       shell: bash
 
     - name: Package artifact (Windows)

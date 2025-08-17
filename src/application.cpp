@@ -1769,9 +1769,9 @@ std::optional<AppVersion> Application::findLatestVersion() {
     for (const auto& item : j) {
         if (!item.is_object()) continue;
         if (item.value("draft", false)) continue;
-        if (item.value("prerelease", false) && !m_settings.showReleaseCandidates) continue;
 
         const std::string tag = item.value("name", "");
+        if (tag.contains("-rc") && !m_settings.showReleaseCandidates) continue;
 
         auto maybeV = parseVersion(tag);
         if (maybeV) versions.push_back(*maybeV);
