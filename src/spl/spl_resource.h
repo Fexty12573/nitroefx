@@ -13,7 +13,6 @@
 #include "fx.h"
 #include "gfx/gl_texture.h"
 
- 
 
 struct SPLFileHeader {
     u32 magic;
@@ -650,7 +649,14 @@ struct TextureImportSpecification {
     size_t getSizeEstimate(size_t width, size_t height) const;
 };
 
+struct SPLTextureCopy;
 struct SPLTexture {
+    SPLTexture() = default;
+    SPLTexture(const SPLTexture&) = default;
+    SPLTexture(SPLTexture&& other) noexcept;
+    SPLTexture& operator=(const SPLTexture&) = default;
+    SPLTexture& operator=(SPLTexture&& other) noexcept;
+
     const SPLTextureResource* resource;
     SPLTextureParam param;
     u16 width;
@@ -662,6 +668,8 @@ struct SPLTexture {
     std::vector<u8> convertToRGBA8888() const;
     std::vector<u8> convertTo8bpp() const;
     size_t getPaletteSize() const;
+
+    SPLTextureCopy copy() const;
 
     static TextureImportSpecification suggestSpecification(
         s32 width, 
@@ -681,6 +689,11 @@ struct SPLTexture {
     );
 };
 
+struct SPLTextureCopy {
+    std::vector<u8> data;
+    std::vector<u8> pltt;
+    SPLTexture texture;
+};
 
 //using SPLScaleAnim = SPLScaleAnimTemplate<f32>;
 //using SPLScaleAnimNative = SPLScaleAnimTemplate<fx16>;
@@ -732,4 +745,10 @@ struct SPLResource {
     SPLResource duplicate() const;
 
     static SPLResource create();
+};
+
+struct SPLResourceCopy {
+    std::string source;
+    std::unique_ptr<SPLResource> resource;
+    std::unique_ptr<SPLTextureCopy> texture;
 };

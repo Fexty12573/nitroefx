@@ -11,9 +11,12 @@ public:
     static constexpr u32 LightBlue2 = IM_COL32(93, 171, 231, 255);
     static constexpr u32 LightGreen = IM_COL32(143, 228, 143, 255);
     static constexpr u32 LightGreen2 = IM_COL32(133, 208, 133, 255);
+    static constexpr u32 LightGreen3 = IM_COL32(182, 219, 192, 255);
     static constexpr u32 Turquoise = IM_COL32(35, 209, 139, 255);
     static constexpr u32 Red = IM_COL32(255, 93, 93, 255);
     static constexpr u32 LightRed = IM_COL32(245, 87, 98, 255);
+    static constexpr u32 LightPurple = IM_COL32(174, 143, 191, 255);
+    static constexpr u32 LightOrange = IM_COL32(237, 212, 147, 255);
     static constexpr u32 Gray = IM_COL32(128, 128, 128, 255);
     static constexpr u32 DarkGray = IM_COL32(79, 79, 79, 200);
     static constexpr u32 DarkGray2 = IM_COL32(90, 90, 90, 255);

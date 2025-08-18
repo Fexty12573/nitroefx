@@ -202,6 +202,30 @@ size_t TextureImportSpecification::getSizeEstimate(size_t width, size_t height) 
     }
 }
 
+SPLTexture::SPLTexture(SPLTexture&& other) noexcept
+    : resource(std::exchange(other.resource, nullptr))
+    , param(other.param)
+    , width(std::exchange(other.width, 0))
+    , height(std::exchange(other.height, 0))
+    , textureData(std::exchange(other.textureData, {}))
+    , paletteData(std::exchange(other.paletteData, {}))
+    , glTexture(std::move(other.glTexture)) {
+}
+
+SPLTexture& SPLTexture::operator=(SPLTexture&& other) noexcept {
+    if (this != &other) {
+        resource = std::exchange(other.resource, nullptr);
+        param = other.param;
+        width = std::exchange(other.width, 0);
+        height = std::exchange(other.height, 0);
+        textureData = std::exchange(other.textureData, {});
+        paletteData = std::exchange(other.paletteData, {});
+        glTexture = std::move(other.glTexture);
+    }
+
+    return *this;
+}
+
 std::vector<u8> SPLTexture::convertToRGBA8888() const {
     return GLTexture::toRGBA(*this);
 }
@@ -328,4 +352,24 @@ TextureImportSpecification SPLTexture::suggestSpecification(
         .uniqueAlphas = stats.uniqueAlphas,
         .flags = stats.flags
     };
+}
+
+SPLTextureCopy SPLTexture::copy() const {
+    SPLTextureCopy copy;
+    copy.texture.resource = nullptr; // Is always nullptr, should probably remove it...
+    copy.texture.param = param;
+    copy.texture.width = width;
+    copy.texture.height = height;
+
+    copy.data.resize(textureData.size());
+    copy.pltt.resize(paletteData.size());
+    std::memcpy(copy.data.data(), textureData.data(), textureData.size());
+    std::memcpy(copy.pltt.data(), paletteData.data(), paletteData.size());
+
+    copy.texture.textureData = std::span<const u8>(copy.data);
+    copy.texture.paletteData = std::span<const u8>(copy.pltt);
+
+    copy.texture.glTexture = std::make_shared<GLTexture>(copy.texture);
+
+    return copy;
 }

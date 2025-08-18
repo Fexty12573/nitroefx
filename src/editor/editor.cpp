@@ -419,6 +419,42 @@ void Editor::redo() {
     }
 }
 
+void Editor::pushClipboard(const std::string& source, const SPLResource& res) {
+    if (m_clipboardHistory.size() >= 10) {
+        m_clipboardHistory.pop();
+    }
+
+    m_clipboardHistory.emplace(
+        source,
+        std::make_unique<SPLResource>(res.duplicate()),
+        nullptr
+    );
+}
+
+void Editor::pushClipboard(const std::string& source, const SPLTexture& tex) {
+    if (m_clipboardHistory.size() >= 10) {
+        m_clipboardHistory.pop();
+    }
+
+    m_clipboardHistory.emplace(
+        source,
+        nullptr,
+        std::make_unique<SPLTextureCopy>(tex.copy())
+    );
+}
+
+void Editor::pushClipboard(const std::string& source, const SPLResource& res, const SPLTexture& tex) {
+    if (m_clipboardHistory.size() >= 10) {
+        m_clipboardHistory.pop();
+    }
+
+    m_clipboardHistory.emplace(
+        source,
+        std::make_unique<SPLResource>(res.duplicate()),
+        std::make_unique<SPLTextureCopy>(tex.copy())
+    );
+}
+
 void Editor::playEmitter(EmitterSpawnType spawnType) {
     const auto& editor = g_projectManager->getActiveEditor();
     if (!editor) {
@@ -513,6 +549,9 @@ void Editor::renderResourcePicker() {
             return;
         }
 
+        const SPLResourceCopy* toPaste = nullptr;
+        size_t pasteIndex = -1;
+
         auto& archive = editor->getArchive();
         auto& resources = archive.getResources();
         auto& textures = archive.getTextures();
@@ -588,7 +627,29 @@ void Editor::renderResourcePicker() {
                 ImGui::TextUnformatted(name.c_str());
 
                 if (ImGui::BeginPopup("##ResourcePopup")) {
-                    if (ImGui::MenuItemIcon(ICON_FA_CLONE, "Duplicate")) {
+                    if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy", "Ctrl+C", false, AppColors::LightGreen3)) {
+                        pushClipboard(editor->getName(), resource);
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy with Texture", "Ctrl+Shift+C", false, AppColors::LightGreen3)) {
+                        pushClipboard(editor->getName(), resource, texture);
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !m_clipboardHistory.empty())) {
+                        const auto& copy = m_clipboardHistory.back();
+                        if (!copy.resource) {
+                            spdlog::error("No resource in clipboard to paste");
+                        } else {
+                            toPaste = &copy;
+                            pasteIndex = i;
+                        }
+
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    if (ImGui::MenuItemIcon(ICON_FA_CLONE, "Duplicate", nullptr, false, AppColors::LightBlue2)) {
                         editor->duplicateResource(i);
                         m_selectedResources[id] = resources.size() - 1;
                         editor->notifyResourceChanged(resources.size() - 1);
@@ -596,7 +657,7 @@ void Editor::renderResourcePicker() {
                         ImGui::CloseCurrentPopup();
                     }
 
-                    if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete")) {
+                    if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, AppColors::Gray)) {
                         if (m_selectedResources[id] == i) {
                             m_selectedResources[id] = -1;
                             editor->notifyResourceChanged(-1);
@@ -628,10 +689,81 @@ void Editor::renderResourcePicker() {
                 killEmitters(); // Stop all emitters before adding a new resource to avoid crashes
                 editor->addResource();
                 m_selectedResources[id] = resources.size() - 1;
+                editor->notifyResourceChanged(resources.size() - 1);
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !m_clipboardHistory.empty())) {
+                const auto& copy = m_clipboardHistory.back();
+                if (!copy.resource) {
+                    spdlog::error("No resource in clipboard to paste");
+                } else {
+                    toPaste = &copy;
+                    pasteIndex = -1; // Paste as new resource
+                }
                 ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
+        }
+
+        if (ImGui::IsWindowFocused() || ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_C) && ImGui::GetIO().KeyCtrl) {
+                if (editor && m_selectedResources[id] != -1) {
+                    const auto& resource = resources[m_selectedResources[id]];
+                    
+                    if (ImGui::GetIO().KeyShift) {
+                        pushClipboard(editor->getName(), resource, textures[resource.header.misc.textureIndex]);
+                    } else {
+                        pushClipboard(editor->getName(), resource);
+                    }
+                }
+            }
+
+            if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::GetIO().KeyCtrl) {
+                if (!m_clipboardHistory.empty()) {
+                    const auto& copy = m_clipboardHistory.back();
+                    if (copy.resource) {
+                        toPaste = &copy;
+                        pasteIndex = -1; // Paste at end
+                    } else {
+                        spdlog::error("No resource in clipboard to paste");
+                    }
+                }
+            }
+        }
+
+        if (toPaste) {
+            size_t texIndex = 0;
+            if (toPaste->texture) {
+                // Texture always pasted at the end
+                texIndex = textures.size();
+
+                auto& tex = *toPaste->texture;
+
+                auto& texData = archive.getTextureData();
+                auto& palData = archive.getPaletteData();
+
+                texData.push_back(std::move(tex.data));
+                palData.push_back(std::move(tex.pltt));
+
+                auto& existingTextures = archive.getTextures();
+                existingTextures.emplace_back(std::move(tex.texture));
+
+                editor->getParticleSystem().getRenderer().setTextures(existingTextures);
+            }
+
+            if (toPaste->resource) {
+                if (pasteIndex >= resources.size() || pasteIndex == -1) {
+                    auto& res = resources.emplace_back(std::move(*toPaste->resource));
+                    res.header.misc.textureIndex = static_cast<u8>(texIndex);
+                } else {
+                    const auto res = resources.emplace(resources.begin() + pasteIndex, std::move(*toPaste->resource));
+                    res->header.misc.textureIndex = static_cast<u8>(texIndex);
+                }
+            }
+
+            editor->valueChanged(true);
         }
     }
 
@@ -677,6 +809,9 @@ void Editor::renderTextureManager() {
             }
         }
 
+        ImGui::BeginChild("##TextureList", {}, ImGuiChildFlags_Border);
+        bool anyHovered = false;
+
         const ImVec2 padding = { ImGui::GetStyle().FramePadding.x, 16.0f - ImGui::GetTextLineHeight() * 0.5f };
 
         for (int i = 0; i < textures.size(); ++i) {
@@ -717,6 +852,10 @@ void Editor::renderTextureManager() {
                     if (path) {
                         archive.exportTexture(i, path);
                     }
+                }
+
+                if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy", nullptr, false, AppColors::LightGreen3)) {
+                    pushClipboard(editor->getName(), texture);
                 }
 
                 if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, AppColors::Gray)) {
@@ -764,6 +903,45 @@ void Editor::renderTextureManager() {
 
                 ImGui::TreePop();
             }
+
+            anyHovered |= ImGui::IsItemHovered();
+        }
+
+        ImGui::EndChild();
+
+        const auto copyTexture = [&] {
+            const auto& copy = m_clipboardHistory.back();
+            if (!copy.texture || copy.resource) {
+                spdlog::error("No texture in clipboard to paste");
+            } else {
+                auto& tex = *m_clipboardHistory.back().texture;
+
+                auto& texData = archive.getTextureData();
+                auto& palData = archive.getPaletteData();
+
+                texData.push_back(std::move(tex.data));
+                palData.push_back(std::move(tex.pltt));
+
+                auto& existingTextures = archive.getTextures();
+                existingTextures.emplace_back(std::move(tex.texture));
+
+                editor->getParticleSystem().getRenderer().setTextures(existingTextures);
+                editor->valueChanged(true);
+            }
+        };
+
+        if (ImGui::IsWindowFocused() || ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
+           if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::GetIO().KeyCtrl && !m_clipboardHistory.empty()) {
+                copyTexture();
+           }
+        }
+
+        if (!anyHovered && ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !m_clipboardHistory.empty())) {
+                copyTexture();
+            }
+
+            ImGui::EndPopup();
         }
 
         const auto popupPos = ImGui::GetMainViewport()->GetCenter();
@@ -1771,7 +1949,7 @@ bool Editor::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res
     const auto startPos = ImGui::GetCursorScreenPos();
     const auto maxWidth = ImGui::GetContentRegionAvail().x;
     auto pos = startPos;
-
+    
     constexpr auto toImColor = [](const glm::vec3& color) {
         return IM_COL32(
             (u8)(color.r * 255),

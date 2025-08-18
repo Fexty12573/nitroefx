@@ -55,6 +55,10 @@ public:
     void undo();
     void redo();
 
+    void pushClipboard(const std::string& source, const SPLResource& res);
+    void pushClipboard(const std::string& source, const SPLTexture& tex);
+    void pushClipboard(const std::string& source, const SPLResource& res, const SPLTexture& tex);
+
     const EditorSettings& getSettings() const {
         return m_settings;
     }
@@ -158,6 +162,8 @@ private:
     std::shared_ptr<GridRenderer> m_gridRenderer;
     std::unique_ptr<DebugRenderer> m_debugRenderer;
     std::shared_ptr<GridRenderer> m_collisionGridRenderer;
+
+    std::queue<SPLResourceCopy> m_clipboardHistory;
 
     struct EmitterSpawnTask {
         u64 resourceIndex;

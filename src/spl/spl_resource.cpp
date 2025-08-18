@@ -40,7 +40,7 @@ SPLResource SPLResource::create() {
     res.header.aspectRatio = 1.0f;
     res.header.emitterLifeTime = 0.1f;
     res.header.particleLifeTime = 0.1f;
-    res.header.variance.lifeTime = 1.0f;
+    res.header.variance.lifeTime = 0.0f;
     res.header.misc.emissionInterval = 0.1f;
     res.header.misc.baseAlpha = 1.0f;
 
