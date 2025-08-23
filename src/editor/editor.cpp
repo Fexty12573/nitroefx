@@ -47,6 +47,7 @@ Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer() {
     m_debugRenderer = std::make_unique<DebugRenderer>(1000);
     m_collisionGridRenderer = std::make_shared<GridRenderer>(s_gridDimensions / 2, s_gridSpacing);
     m_settingsWindowId = ImHashStr("Settings##Editor");
+    m_tutorialWindowId = ImHashStr("Tutorial##Editor");
 }
 
 void Editor::render() {
@@ -112,6 +113,8 @@ void Editor::render() {
     if (m_settingsOpen) {
         renderSettings();
     }
+
+    renderTutorial();
 
     const auto editors = g_projectManager->getUnsavedEditors();
     if (!editors.empty()) {
@@ -201,6 +204,12 @@ void Editor::renderMenu(std::string_view name) {
     if (name == "Edit") {
         if (ImGui::MenuItemIcon(ICON_FA_GEAR, "Editor Settings", nullptr)) {
             openSettings();
+        }
+    }
+
+    if (name == "Help") {
+        if (ImGui::MenuItemIcon(ICON_FA_BOOK, "Quick Tutorial", nullptr)) {
+            openTutorial();
         }
     }
 }
@@ -302,6 +311,19 @@ void Editor::openSettings() {
     ImGui::PopID();
 }
 
+void Editor::openTutorial() {
+    ImGui::PushOverrideID(m_tutorialWindowId);
+    ImGui::OpenPopup("##ViewportTutorial");
+    ImGui::PopID();
+}
+
+void Editor::onEditorOpened(const std::shared_ptr<EditorInstance> &editor) {
+    if (m_showTutorial) {
+        openTutorial();
+        m_showTutorial = false;
+    }
+}
+
 void Editor::save() {
     const auto& editor = g_projectManager->getActiveEditor();
     if (!editor) {
@@ -356,6 +378,7 @@ void Editor::loadConfig(const nlohmann::json& config) {
     m_settings.useFixedDsResolution = settings.value("useFixedDsResolution", m_settingsDefault.useFixedDsResolution);
     m_settings.fixedDsResolutionScale = settings.value("fixedDsResolutionScale", m_settingsDefault.fixedDsResolutionScale);
     m_settings.useLegacyParticleRenderer = settings.value("useLegacyParticleRenderer", m_settingsDefault.useLegacyParticleRenderer);
+    m_showTutorial = settings.value("showTutorial", true);
 }
 
 void Editor::saveConfig(nlohmann::json& config) const {
@@ -375,7 +398,8 @@ void Editor::saveConfig(nlohmann::json& config) const {
         { "maxParticles", m_settings.maxParticles },
         { "useFixedDsResolution", m_settings.useFixedDsResolution },
         { "fixedDsResolutionScale", m_settings.fixedDsResolutionScale },
-        { "useLegacyParticleRenderer", m_settings.useLegacyParticleRenderer }
+        { "useLegacyParticleRenderer", m_settings.useLegacyParticleRenderer },
+        { "showTutorial", m_showTutorial }
     });
 }
 
@@ -1295,6 +1319,143 @@ void Editor::renderSettings() {
 
     ImGui::PopID();
     ImGui::PopStyleVar();
+}
+
+void Editor::renderTutorial() {
+    ImGui::PushOverrideID(m_tutorialWindowId);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 16, 16 });
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, { 0.5f, 0.5f });
+    ImGui::SetNextWindowSize({ 900, 0 }, ImGuiCond_Once);
+
+    if (ImGui::BeginPopupModal("##ViewportTutorial", nullptr, ImGuiWindowFlags_NoDecoration)) {
+        const auto icon = g_application->getIcon();
+        const auto windowSize = ImGui::GetWindowSize();
+        if (icon) {
+            constexpr float iconSize = 64.0f;
+            ImGui::SetCursorPosX((windowSize.x - iconSize) * 0.5f);
+            ImGui::Image(icon->getHandle(), { iconSize, iconSize });
+        }
+
+        if (auto* large = g_application->getFont("Large")) {
+            ImGui::PushFont(large);
+        }
+
+        constexpr auto title = "NitroEFX Quick Tutorial";
+        const auto titleSize = ImGui::CalcTextSize(title);
+
+        ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
+        ImGui::TextUnformatted(title);
+
+        if (g_application->getFont("Large")) {
+            ImGui::PopFont();
+        }
+
+        ImGui::Separator();
+
+        ImGui::TextDisabled("Tips to navigate the viewport and get started.");
+
+        ImGui::Spacing();
+
+        if (ImGui::BeginTable("##tutorial_layout", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("left", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+            ImGui::TableSetupColumn("right", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableNextRow();
+
+            // Left: Camera controls
+            ImGui::TableSetColumnIndex(0);
+            ImGui::SeparatorText("Camera Controls");
+            if (ImGui::BeginTable("##controls_table", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH | ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("How", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Move Camera");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Alt + Left-Drag");
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Zoom Camera");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Alt + Right-Drag or Mouse Wheel");
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Pan Camera");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Alt + Middle-Drag");
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Reset Camera");
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%s", g_application->getKeybind(ApplicationAction::ResetCamera)->toString().c_str());
+
+                ImGui::EndTable();
+            }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Hints");
+            ImGui::BulletText("Use DS Resolution to preview at DS aspect.");
+            ImGui::BulletText("Use the Global Time Scale to slow down fast effects.");
+            ImGui::BulletText("Right-click in the Resource List to add new resources.");
+            ImGui::BulletText("Use Ctrl+C and Ctrl+V to copy/paste resources and textures.");
+            ImGui::BulletText("Open the Texture Manager to import and manage textures.");
+
+            // Right: Viewport options and links
+            ImGui::TableSetColumnIndex(1);
+            bool changed = false;
+            bool swapRenderer = false;
+
+            ImGui::SeparatorText("Viewport Options");
+            changed |= ImGui::Checkbox("Display Active Emitters", &m_settings.displayActiveEmitters);
+            changed |= ImGui::Checkbox("Display Edited Emitter", &m_settings.displayEditedEmitter);
+
+            if (ImGui::Checkbox("Use DS Resolution", &m_settings.useFixedDsResolution)) {
+                changed = true;
+            }
+            if (m_settings.useFixedDsResolution) {
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                changed |= ImGui::SliderInt("DS Resolution Scale", &m_settings.fixedDsResolutionScale, 1, 8);
+                m_settings.fixedDsResolutionScale = glm::clamp(m_settings.fixedDsResolutionScale, 1, 8);
+            }
+
+            if (ImGui::Checkbox("Use Accurate Renderer", &m_settings.useLegacyParticleRenderer)) {
+                changed = true;
+                swapRenderer = true;
+            }
+
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SliderFloat("Global Time Scale", &m_timeScale, 0.0f, 2.0f, "%.2f");
+
+            if (changed) {
+                updateRenderSettings(swapRenderer);
+                g_application->saveConfig();
+            }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Resources");
+            ImGui::TextLinkOpenURL("GitHub Repository", "https://github.com/Fexty12573/nitroefx");
+            ImGui::TextLinkOpenURL("Report an Issue", "https://github.com/Fexty12573/nitroefx/issues/new");
+            ImGui::TextLinkOpenURL("Releases", "https://github.com/Fexty12573/nitroefx/releases");
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        ImGui::TextDisabled("You can always open this window via Help > Quick Tutorial.");
+        ImGui::SameLine();
+
+        constexpr float buttonWidth = 100.0f;
+        ImGui::SetCursorPosX(windowSize.x - buttonWidth - ImGui::GetStyle().WindowPadding.x);
+        if (ImGui::Button("Got it!", { buttonWidth, 0 })) {
+            g_application->saveConfig();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar();
+    ImGui::PopID();
 }
 
 void Editor::updateRenderSettings(bool swapRenderer) {

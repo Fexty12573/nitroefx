@@ -654,6 +654,8 @@ void Application::renderMenuBar() {
         }
 
         if (ImGui::BeginMenu("Help")) {
+            m_editor->renderMenu("Help");
+
             if (ImGui::MenuItemIcon(ICON_FA_CODE_BRANCH, "GitHub Repository", nullptr, false, AppColors::Yellow)) {
                 SDL_OpenURL("https://github.com/Fexty12573/nitroefx");
             }

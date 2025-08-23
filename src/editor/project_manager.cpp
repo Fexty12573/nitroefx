@@ -1,4 +1,7 @@
 #include "project_manager.h"
+#include "application.h"
+#include "imgui/extensions.h"
+#include "fonts/IconsFontAwesome6.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -7,9 +10,6 @@
 #include <spdlog/spdlog.h>
 #include <narc/narc.h>
 #include <narc/defs/fimg.h>
-
-#include "imgui/extensions.h"
-#include "fonts/IconsFontAwesome6.h"
 
 
 void ProjectManager::openProject(const std::filesystem::path& path) {
@@ -74,6 +74,8 @@ void ProjectManager::openEditor(const std::filesystem::path& path) {
     }
 
     m_openEditors.push_back(editor);
+    
+    g_application->getEditor()->onEditorOpened(editor);
 }
 
 void ProjectManager::openEditor() {
@@ -82,6 +84,8 @@ void ProjectManager::openEditor() {
 
     m_activeEditor = editor;
     m_forceActivate = true;
+
+    g_application->getEditor()->onEditorOpened(editor);
 }
 
 void ProjectManager::openTempEditor(const std::filesystem::path& path) {
@@ -102,6 +106,8 @@ void ProjectManager::openTempEditor(const std::filesystem::path& path) {
     const auto editor = std::make_shared<EditorInstance>(path, true);
     m_openEditors.push_back(editor);
     m_activeEditor = editor;
+
+    g_application->getEditor()->onEditorOpened(editor);
 }
 
 void ProjectManager::openNarcProject(const std::filesystem::path& path) {

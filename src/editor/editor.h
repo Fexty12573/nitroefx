@@ -34,6 +34,9 @@ public:
     void openTextureManager();
     void updateParticles(float deltaTime);
     void openSettings();
+    void openTutorial();
+
+    void onEditorOpened(const std::shared_ptr<EditorInstance>& editor);
 
     void playEmitter(EmitterSpawnType spawnType);
     void playAllEmitters(EmitterSpawnType spawnType);
@@ -68,6 +71,7 @@ private:
     void renderTextureManager();
     void renderResourceEditor();
     void renderSettings();
+    void renderTutorial();
 
     void updateRenderSettings(bool swapRenderer = false);
 
@@ -132,6 +136,8 @@ private:
     bool m_textureManagerOpen = true;
     bool m_editorOpen = true;
     bool m_settingsOpen = false;
+    bool m_showTutorial = false;
+    int m_tutorialWindowId = 0;
     float m_timeScale = 1.0f;
 
     u32 m_settingsWindowId = 0;

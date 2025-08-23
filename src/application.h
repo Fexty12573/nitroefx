@@ -77,7 +77,7 @@ public:
 
     static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
 
-    static constexpr auto VERSION = "v1.2.0";
+    static constexpr auto VERSION = "v1.2.1";
 
 private:
     void pollEvents();
