@@ -6,6 +6,7 @@
 #include <curl/curl.h>
 #include <SDL3/SDL.h>
 #include <GL/glew.h>
+#include <fmt/compile.h>
 #include <SDL3/SDL_opengl.h>
 #include <imgui.h>
 #include <implot.h>
@@ -14,7 +15,9 @@
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <stb_image.h>
 #include <nlohmann/json.hpp>
+#include <battery/embed.hpp>
 #include <archive.h>
 #include <archive_entry.h>
 #include <chrono>
@@ -145,6 +148,7 @@ int Application::run(int argc, char** argv) {
     clearTempDir();
     loadConfig();
     loadFonts();
+    loadIcon();
     setColors();
 
     m_versionCheckResult = checkForUpdates();
@@ -159,6 +163,7 @@ int Application::run(int argc, char** argv) {
     m_preferencesWindowId = ImHashStr("Preferences##Application");
     m_aboutWindowId = ImHashStr("About##Application");
     m_updateWindowId = ImHashStr("Update##Application");
+    m_welcomeWindowId = ImHashStr("Welcome##Application");
 
     if (argc > 1) {
         const std::filesystem::path arg = argv[1];
@@ -212,6 +217,15 @@ int Application::run(int argc, char** argv) {
         if (m_aboutWindowOpen) {
             renderAboutWindow();
         }
+
+        if (m_firstFrame) {
+            ImGui::PushOverrideID(m_welcomeWindowId);
+            ImGui::OpenPopup("Welcome to NitroEFX");
+            ImGui::PopID();
+            m_firstFrame = false;
+        }
+
+        renderWelcomeWindow();
 
         renderUpdateWindow();
 
@@ -505,10 +519,16 @@ void Application::renderMenuBar() {
                     ImGui::MenuItem("No Recent Projects", nullptr, false, false);
                 }
 
+                std::string toOpen;
                 for (const auto& path : m_recentProjects) {
                     if (ImGui::MenuItem(path.c_str())) {
-                        g_projectManager->openProject(path);
+                        toOpen = path;
                     }
+                }
+
+                if (!toOpen.empty()) {
+                    addRecentProject(toOpen);
+                    g_projectManager->openProject(toOpen);
                 }
 
                 ImGui::SeparatorText("Files");
@@ -516,10 +536,15 @@ void Application::renderMenuBar() {
                     ImGui::MenuItem("No Recent Files", nullptr, false, false);
                 }
 
+                toOpen.clear();
                 for (const auto& path : m_recentFiles) {
                     if (ImGui::MenuItem(path.c_str())) {
-                        tryOpenEditor(path);
+                        toOpen = path;
                     }
+                }
+
+                if (!toOpen.empty()) {
+                    tryOpenEditor(toOpen);
                 }
 
                 ImGui::EndMenu();
@@ -620,6 +645,8 @@ void Application::renderMenuBar() {
             }
 
             ImGui::MenuItemIcon(ICON_FA_GAUGE, "Performance", nullptr, &m_performanceWindowOpen);
+
+            ImGui::Separator();
 
             m_editor->renderMenu("View");
 
@@ -731,8 +758,6 @@ void Application::renderMenuBar() {
     }
     ImGui::End();
 
-    
-
     ImGui::PopStyleVar(4);
     ImGui::PopStyleColor(3);
 }
@@ -838,7 +863,23 @@ void Application::renderAboutWindow() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
 
     if (ImGui::BeginPopupModal("About NitroEFX", &m_aboutWindowOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("NitroEFX %s", Application::VERSION);
+        const auto windowSize = ImGui::GetWindowSize();
+        if (m_icon) {
+            constexpr auto iconSize = 128.0f;
+            ImGui::SetCursorPosX((windowSize.x - iconSize) * 0.5f);
+            ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
+        }
+
+        ImGui::PushFont(getFont("Large"));
+
+        const auto appStr = fmt::format("NitroEFX {}", Application::VERSION);
+        const auto size = ImGui::CalcTextSize(appStr.c_str());
+        ImGui::SetCursorPosX((windowSize.x - size.x) * 0.5f);
+
+        ImGui::TextUnformatted(appStr.c_str());
+
+        ImGui::PopFont();
+
         ImGui::Separator();
         ImGui::Text("A particle editor for the Nintendo DS Pokémon games.");
         ImGui::Text("Created by Fexty12573");
@@ -898,6 +939,182 @@ void Application::renderUpdateWindow() {
         if (ImGui::IconButton(ICON_FA_CLOCK_ROTATE_LEFT, "Remind Me Later", AppColors::Yellow)) {
            ImGui::CloseCurrentPopup();
            m_versionCheckResult.updateAvailable = false;
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopID();
+}
+
+void Application::renderWelcomeWindow() {
+    ImGui::PushOverrideID(m_welcomeWindowId);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
+
+    const auto popupPos = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(popupPos, ImGuiCond_Appearing, { 0.5f, 0.5f });
+
+    if (ImGui::BeginPopup("Welcome to NitroEFX", ImGuiWindowFlags_AlwaysAutoResize)) {
+        const auto windowSize = ImGui::GetWindowSize();
+        if (m_icon) {
+            constexpr auto iconSize = 96.0f;
+            ImGui::SetCursorPosX((windowSize.x - iconSize) * 0.5f);
+            ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
+        }
+
+        ImGui::PushFont(getFont("Large"));
+        const auto appStr = fmt::format("NitroEFX {}", Application::VERSION);
+        const auto size = ImGui::CalcTextSize(appStr.c_str());
+        ImGui::SetCursorPosX((windowSize.x - size.x) * 0.5f);
+        ImGui::TextUnformatted(appStr.c_str());
+        ImGui::PopFont();
+
+        ImGui::Separator();
+
+        // Layout content in two columns
+        if (ImGui::BeginTable("##welcome_layout", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("left", ImGuiTableColumnFlags_WidthStretch, 1.4f);
+            ImGui::TableSetupColumn("right", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+
+            // Left: Quick Start + Recents
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+
+            ImGui::SeparatorText("Get Started");
+            if (ImGui::IconButton(ICON_FA_FILE_CIRCLE_PLUS, "New SPL File", AppColors::LightBlue)) {
+                g_projectManager->openEditor();
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (ImGui::IconButton(ICON_FA_FILE, "Open SPL File", AppColors::LightGreen)) {
+                const auto file = openFile();
+                if (!file.empty()) {
+                    addRecentFile(file);
+                    tryOpenEditor(file);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            if (ImGui::IconButton(ICON_FA_FOLDER_OPEN, "Open Project", AppColors::DarkBeige)) {
+                const auto project = openDirectory();
+                if (!project.empty()) {
+                    addRecentProject(project);
+                    g_projectManager->openProject(project);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Recent Projects");
+            if (m_recentProjects.empty()) {
+                ImGui::TextDisabled("No recent projects");
+            } else {
+                int count = 0;
+                std::string toOpen;
+                for (const auto& path : m_recentProjects) {
+                    if (count++ >= 5) break;
+                    if (ImGui::Selectable(path.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+                        toOpen = path;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+
+                if (!toOpen.empty()) {
+                    addRecentProject(toOpen);
+                    g_projectManager->openProject(toOpen);
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Recent Files");
+            if (m_recentFiles.empty()) {
+                ImGui::TextDisabled("No recent files");
+            } else {
+                int count = 0;
+                std::string toOpen;
+                for (const auto& path : m_recentFiles) {
+                    if (count++ >= 5) break;
+                    if (ImGui::Selectable(path.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+                        toOpen = path;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+
+                if (!toOpen.empty()) {
+                    tryOpenEditor(toOpen);
+                }
+            }
+
+            // Right: Resources + Shortcuts
+            ImGui::TableSetColumnIndex(1);
+
+            ImGui::SeparatorText("Resources");
+            ImGui::TextLinkOpenURL("GitHub Repository", "https://github.com/Fexty12573/nitroefx");
+            ImGui::TextLinkOpenURL("Report an Issue", "https://github.com/Fexty12573/nitroefx/issues/new");
+            ImGui::TextLinkOpenURL("Latest Releases", "https://github.com/Fexty12573/nitroefx/releases");
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Shortcuts");
+            if (ImGui::BeginTable("##welcome_shortcuts", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+                ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                ImGui::TableHeadersRow();
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("New File");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(NewFile));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Open Project");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(OpenProject));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Open File");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(OpenFile));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Save");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(Save));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Save All");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(SaveAll));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Play Emitter");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(PlayEmitter));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Kill Emitters");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(KillEmitters));
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Reset Camera");
+                ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(KEYBINDSTR(ResetCamera));
+
+                ImGui::EndTable();
+            }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Info");
+            if (m_versionCheckResult.updateAvailable) {
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(AppColors::Turquoise),
+                    ICON_FA_ARROW_UP " Update available: %s", m_versionCheckResult.remoteTag.c_str());
+            } else {
+                ImGui::Text(ICON_FA_CIRCLE_CHECK " You are up-to-date");
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+
+        constexpr auto buttonWidth = 100.0f;
+        ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
+        if (ImGui::Button("Close", { buttonWidth, 0.0f })) {
+            ImGui::CloseCurrentPopup();
         }
 
         ImGui::EndPopup();
@@ -1043,6 +1260,13 @@ void Application::loadFonts() {
         &config
     );
 
+    m_fonts["Large"] = io.Fonts->AddFontFromMemoryCompressedTTF(
+        g_tahoma_compressed_data,
+        g_tahoma_compressed_size,
+        24.0f,
+        &config
+    );
+
     io.Fonts->Build();
 }
 
@@ -1124,6 +1348,18 @@ void Application::loadConfig() {
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
 
     m_editor->loadConfig(config);
+}
+
+void Application::loadIcon() {
+    const auto iconFile = b::embed<"data/nitroefx.png">().vec();
+
+    int w, h, c;
+    const auto rgba = stbi_load_from_memory(iconFile.data(), (int)iconFile.size(), &w, &h, &c, 4);
+    if (rgba) {
+        m_icon = std::make_shared<GLTexture>(w, h, rgba);
+    } else {
+        spdlog::error("Failed to load icon");
+    }
 }
 
 void Application::clearTempDir() {

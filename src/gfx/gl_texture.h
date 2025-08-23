@@ -10,6 +10,7 @@ class GLTexture {
 public:
     explicit GLTexture(const SPLTexture& texture);
     GLTexture(size_t width, size_t height);
+    GLTexture(size_t width, size_t height, const void* rgba8888);
     GLTexture(const GLTexture& other) = delete;
     GLTexture(GLTexture&& other) noexcept;
 

@@ -43,6 +43,39 @@ GLTexture::GLTexture(size_t width, size_t height)
     glCall(glBindTexture(GL_TEXTURE_2D, 0));
 }
 
+GLTexture::GLTexture(size_t width, size_t height, const void* rgba8888)
+    : m_width(width), m_height(height), m_format(TextureFormat::Direct) {
+    glCall(glGenTextures(1, &m_texture));
+    glCall(glBindTexture(GL_TEXTURE_2D, m_texture));
+
+    glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+    glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    glCall(glTexParameteri(
+        GL_TEXTURE_2D,
+        GL_TEXTURE_WRAP_S,
+        GL_MIRRORED_REPEAT
+    ));
+    glCall(glTexParameteri(
+        GL_TEXTURE_2D,
+        GL_TEXTURE_WRAP_T,
+        GL_MIRRORED_REPEAT
+    ));
+
+    glCall(glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        (s32)m_width,
+        (s32)m_height,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        rgba8888
+    ));
+
+    glCall(glBindTexture(GL_TEXTURE_2D, 0));
+}
+
 GLTexture::GLTexture(GLTexture&& other) noexcept {
     if (this != &other) {
         m_texture = other.m_texture;

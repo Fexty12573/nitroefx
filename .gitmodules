@@ -5,3 +5,6 @@
 [submodule "external/narc"]
 	path = external/narc
 	url = https://github.com/Fexty12573/narc
+[submodule "external/embed"]
+	path = external/embed
+	url = https://github.com/batterycenter/embed

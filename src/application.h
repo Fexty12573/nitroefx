@@ -3,6 +3,7 @@
 #include "application_settings.h"
 #include "editor/editor.h"
 #include "editor/project_manager.h"
+#include "gfx/gl_texture.h"
 
 #include <argparse/argparse.hpp>
 #include <SDL3/SDL_events.h>
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <unordered_map>
 #include <span>
+
 
 struct AppVersion {
     int major;
@@ -52,6 +54,10 @@ public:
     void saveConfig();
     ImFont* getFont(const std::string& name);
 
+    std::shared_ptr<GLTexture> getIcon() const {
+        return m_icon;
+    }
+
     std::optional<Keybind> getKeybind(u32 action) const;
     std::optional<Keybind> getKeybind(const std::string_view& name) const;
 
@@ -83,9 +89,11 @@ private:
     void renderPerformanceWindow();
     void renderAboutWindow();
     void renderUpdateWindow();
+    void renderWelcomeWindow();
     void setColors();
     void loadFonts();
     void loadConfig();
+    void loadIcon();
     void clearTempDir();
     void executeAction(u32 action);
 
@@ -135,15 +143,19 @@ private:
     VersionCheckResult m_versionCheckResult;
     bool m_updateOnClose = false;
 
+    std::shared_ptr<GLTexture> m_icon;
+
     ApplicationSettings m_settings;
     std::vector<u32> m_sortedActions;
     int m_preferencesWindowId = 0;
     int m_aboutWindowId = 0;
     int m_updateWindowId = 0;
+    int m_welcomeWindowId = 0;
     bool m_preferencesOpen = false;
     bool m_aboutWindowOpen = false;
     bool m_listeningForInput = false;
     bool m_exitKeybindListening = false;
+    bool m_firstFrame = true;
     Keybind* m_listeningKeybind = nullptr;
 
     std::set<SDL_Keycode> m_modifierKeys;

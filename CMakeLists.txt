@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+include(FetchContent)
 
 if (WIN32)
     set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
@@ -21,10 +22,13 @@ find_package(SPNG CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(LibArchive REQUIRED)
 add_subdirectory(external/narc)
+add_subdirectory(external/embed)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
 
 add_executable(nitroefx ${SOURCES} external/tinyfiledialogs/tinyfiledialogs.c)
+
+b_embed(nitroefx data/nitroefx.png)
 
 set(LIBIMAGEQUANT_DIR ${CMAKE_SOURCE_DIR}/external/libimagequant)
 
