@@ -90,12 +90,15 @@ private:
     void renderAboutWindow();
     void renderUpdateWindow();
     void renderWelcomeWindow();
+    void renderRestartPopup();
     void setColors();
     void loadFonts();
     void loadConfig();
     void loadIcon();
     void clearTempDir();
     void executeAction(u32 action);
+
+    void restart();
 
     void addRecentFile(const std::string& path);
     void addRecentProject(const std::string& path);
@@ -156,6 +159,8 @@ private:
     bool m_listeningForInput = false;
     bool m_exitKeybindListening = false;
     bool m_firstFrame = true;
+    bool m_uiScaleChanged = false;
+    bool m_reloadFonts = false;
     Keybind* m_listeningKeybind = nullptr;
 
     std::set<SDL_Keycode> m_modifierKeys;

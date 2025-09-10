@@ -10,6 +10,7 @@ struct ApplicationSettings {
     std::map<u32, Keybind> keybinds;
     bool checkForUpdates;
     bool showReleaseCandidates;
+    float uiScale = 1.0f;
 
     static ApplicationSettings getDefault();
 };

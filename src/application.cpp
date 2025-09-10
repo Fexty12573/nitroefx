@@ -185,6 +185,11 @@ int Application::run(int argc, char** argv) {
 
         pollEvents();
 
+        if (m_reloadFonts) {
+            loadFonts();
+            m_reloadFonts = false;
+        }
+
         m_editor->updateParticles(delta);
         m_editor->renderParticles();
 
@@ -228,6 +233,8 @@ int Application::run(int argc, char** argv) {
         renderWelcomeWindow();
 
         renderUpdateWindow();
+
+        renderRestartPopup();
 
         ImGui::Render();
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
@@ -616,6 +623,7 @@ void Application::renderMenuBar() {
 
             if (ImGui::MenuItemIcon(ICON_FA_WRENCH, "Preferences")) {
                 m_preferencesOpen = true;
+                m_uiScaleChanged = false;
 
                 ImGui::PushOverrideID(m_preferencesWindowId);
                 ImGui::OpenPopup("Preferences##Application");
@@ -688,10 +696,10 @@ void Application::renderMenuBar() {
 
     const auto viewport = (ImGuiViewportP*)ImGui::GetMainViewport();
     constexpr auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-    constexpr float framePaddingY = 4.0f;
-    constexpr float itemHeight = 24.0f;
-    constexpr float barHeight = itemHeight + 2.0f;
-    constexpr ImVec2 size = { itemHeight, itemHeight };
+    const float framePaddingY = 4.0f * m_settings.uiScale;
+    const float itemHeight = 24.0f * m_settings.uiScale;
+    const float barHeight = itemHeight + 2.0f;
+    const ImVec2 size = { itemHeight, itemHeight };
 
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AppColors::DarkGray);
@@ -769,11 +777,14 @@ void Application::renderPreferences() {
     ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
 
+    bool wasOpen = m_preferencesOpen;
     if (ImGui::BeginPopupModal("Preferences##Application", &m_preferencesOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::SeparatorText("Updates");
 
         ImGui::Checkbox("Check for updates on startup", &m_settings.checkForUpdates);
         ImGui::Checkbox("Include pre-release versions", &m_settings.showReleaseCandidates);
+
+        m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
 
         ImGui::SeparatorText("Keybinds");
 
@@ -840,9 +851,17 @@ void Application::renderPreferences() {
 
         ImGui::EndPopup();
     }
-
+    
     ImGui::PopStyleVar(2);
     ImGui::PopID();
+
+    if (wasOpen && !m_preferencesOpen) {
+        // Preferences window was just closed
+        if (m_uiScaleChanged) {
+            ImGui::OpenPopup("Restart Required##Application");
+            m_uiScaleChanged = false;
+        }
+    }
 }
 
 void Application::renderPerformanceWindow() {
@@ -1126,6 +1145,27 @@ void Application::renderWelcomeWindow() {
     ImGui::PopID();
 }
 
+void Application::renderRestartPopup() {
+    if (ImGui::BeginPopupModal("Restart Required##Application", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Changing the UI scale requires a restart to take effect.");
+        ImGui::Separator();
+
+        if (ImGui::Button("Restart Now")) {
+            saveConfig();
+            restart();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Later")) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
 void Application::setColors() {
     ImGuiStyle& style = ImGui::GetStyle();
 
@@ -1239,7 +1279,7 @@ void Application::loadFonts() {
     io.Fonts->AddFontFromMemoryCompressedTTF(
         g_tahoma_compressed_data, 
         g_tahoma_compressed_size, 
-        18.0f, 
+        18.0f * m_settings.uiScale, 
         &config
     );
 
@@ -1248,7 +1288,7 @@ void Application::loadFonts() {
     io.Fonts->AddFontFromMemoryCompressedTTF(
         g_icon_font_compressed_data, 
         g_icon_font_compressed_size, 
-        18.0f, 
+        18.0f * m_settings.uiScale, 
         &config,
         iconRanges
     );
@@ -1258,14 +1298,14 @@ void Application::loadFonts() {
     m_fonts["Italic"] = io.Fonts->AddFontFromMemoryCompressedTTF(
         g_tahoma_italic_compressed_data,
         g_tahoma_italic_compressed_size,
-        18.0f,
+        18.0f * m_settings.uiScale,
         &config
     );
 
     m_fonts["Large"] = io.Fonts->AddFontFromMemoryCompressedTTF(
         g_tahoma_compressed_data,
         g_tahoma_compressed_size,
-        24.0f,
+        24.0f * m_settings.uiScale,
         &config
     );
 
@@ -1348,6 +1388,7 @@ void Application::loadConfig() {
 
     m_settings.checkForUpdates = config.value("checkForUpdates", m_settings.checkForUpdates);
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
+    m_settings.uiScale = config.value("uiScale", m_settings.uiScale);
 
     m_editor->loadConfig(config);
 }
@@ -1433,6 +1474,22 @@ void Application::executeAction(u32 action) {
         m_editor->resetCamera();
         break;
     }
+}
+
+void Application::restart() {
+    const auto exePath = getExecutablePath();
+#ifdef _WIN32
+    STARTUPINFOW si{};
+    si.cb = sizeof(STARTUPINFOW);
+    PROCESS_INFORMATION pi{};
+    if (CreateProcessW(nullptr, exePath.wstring().data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi) == 0) {
+        spdlog::error("Failed to restart application: {}", GetLastError());
+    }
+#else
+    execv(exePath.string().c_str(), nullptr);
+#endif
+
+    m_running = false;
 }
 
 std::optional<AppVersion> Application::parseVersion(const std::string& versionStr) {
@@ -1558,6 +1615,7 @@ void Application::saveConfig() {
 
     config["checkForUpdates"] = m_settings.checkForUpdates;
     config["showReleaseCandidates"] = m_settings.showReleaseCandidates;
+    config["uiScale"] = m_settings.uiScale;
 
     m_editor->saveConfig(config);
 
