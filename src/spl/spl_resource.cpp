@@ -34,6 +34,7 @@ SPLResource SPLResource::create() {
     SPLResource res{};
     std::memset(&res.header, 0, sizeof(res.header));
 
+    res.header.flags.selfMaintaining = true;
     res.header.emissionCount = 1;
     res.header.color = { 1.0f, 1.0f, 1.0f };
     res.header.baseScale = 1.0f;
@@ -43,6 +44,7 @@ SPLResource SPLResource::create() {
     res.header.variance.lifeTime = 0.0f;
     res.header.misc.emissionInterval = 0.1f;
     res.header.misc.baseAlpha = 1.0f;
+    res.header.misc.airResistance = 1.0f;
 
     return res;
 }
