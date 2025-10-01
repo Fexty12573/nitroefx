@@ -2342,7 +2342,7 @@ bool Application::extractTarGz(const std::filesystem::path& archivePath, const s
     mtar_t tar{
         .read = [](mtar_t* tar, void* buf, u32 size) -> int {
             const auto data = (u8*)tar->stream;
-            u32 toRead = min(size, tar->remaining_data - tar->pos);
+            u32 toRead = std::min(size, tar->remaining_data - tar->pos);
             std::memcpy(buf, data + tar->pos, toRead);
             tar->pos += toRead;
             return MTAR_ESUCCESS;
@@ -2380,6 +2380,8 @@ bool Application::extractTarGz(const std::filesystem::path& archivePath, const s
         std::filesystem::perms::others_exec | std::filesystem::perms::others_read,
         std::filesystem::perm_options::add);
 #endif
+
+    return true;
 }
 
 bool Application::gunzipFile(const std::filesystem::path& srcPath, std::vector<u8>& dst) {
@@ -2390,10 +2392,10 @@ bool Application::gunzipFile(const std::filesystem::path& srcPath, std::vector<u
     }
 
     constexpr auto bufSize = 64 * 1024u;
-    u8 buffer[bufSize];
+    std::vector<u8> buffer(bufSize);
     int r;
-    while ((r = gzread(f, buffer, bufSize)) > 0) {
-        dst.insert(dst.end(), buffer, buffer + r);
+    while ((r = gzread(f, buffer.data(), bufSize)) > 0) {
+        dst.insert(dst.end(), buffer.data(), buffer.data() + r);
     }
 
     gzclose(f);
