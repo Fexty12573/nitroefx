@@ -141,7 +141,15 @@ int Application::run(int argc, char** argv) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+#ifdef _WIN32
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+#else
+    // Multi-viewport doesn't work very well under WSL
+    if (!Application::isRunningUnderWSL()) {
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    }
+#endif
 
     m_iniFilename = (getConfigPath() / "nitroefx.ini").string();
     io.IniFilename = m_iniFilename.c_str();
@@ -2081,6 +2089,26 @@ std::optional<AppVersion> Application::findLatestVersion() {
     }
 
     return getNewestVersion(versions);
+}
+
+bool Application::isRunningUnderWSL() {
+#ifdef _WIN32
+    return false;
+#else
+    try {
+        std::ifstream osrelease("/proc/sys/kernel/osrelease");
+        if (!osrelease.is_open()) {
+            return false;
+        }
+        std::string line;
+        std::getline(osrelease, line);
+        osrelease.close();
+
+        return line.contains("microsoft") || line.contains("WSL");
+    } catch (...) {
+        return false;
+    }
+#endif
 }
 
 void Application::applyUpdateNow(const std::filesystem::path& binaryPath, bool relaunch) {

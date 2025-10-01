@@ -77,7 +77,7 @@ public:
 
     static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
 
-    static constexpr auto VERSION = "v1.2.2-rc3";
+    static constexpr auto VERSION = "v1.2.2-rc4";
 
 private:
     void pollEvents();
@@ -116,6 +116,8 @@ private:
     VersionCheckResult checkForUpdates();
 
     std::optional<AppVersion> findLatestVersion();
+
+    static bool isRunningUnderWSL();
 
     static size_t writeBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
     static size_t writeHeaderCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
