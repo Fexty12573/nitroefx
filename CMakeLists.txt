@@ -20,13 +20,19 @@ find_package(GLEW REQUIRED)
 find_package(implot CONFIG REQUIRED)
 find_package(SPNG CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
-find_package(LibArchive REQUIRED)
+find_package(minizip-ng CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
 add_subdirectory(external/narc)
 add_subdirectory(external/embed)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
 
-add_executable(nitroefx ${SOURCES} external/tinyfiledialogs/tinyfiledialogs.c)
+set(EXTERNAL_SOURCES 
+    external/tinyfiledialogs/tinyfiledialogs.c
+    external/microtar/src/microtar.c
+)
+
+add_executable(nitroefx ${SOURCES} ${EXTERNAL_SOURCES})
 
 b_embed(nitroefx data/nitroefx.png)
 
@@ -60,6 +66,7 @@ add_dependencies(nitroefx libimagequant_sys_build)
 target_include_directories(nitroefx PRIVATE 
     src 
     external/tinyfiledialogs
+    external/microtar/src
     external/stb
     external/libimagequant/imagequant-sys)
 target_compile_definitions(nitroefx PRIVATE 
@@ -77,7 +84,8 @@ target_link_libraries(nitroefx PRIVATE
     spng::spng_static
     libnarc_static
     CURL::libcurl_static
-    LibArchive::LibArchive
+    ZLIB::ZLIB
+    MINIZIP::minizip-ng
     ${IMAGEQUANT_LIB})
 
 if (WIN32)

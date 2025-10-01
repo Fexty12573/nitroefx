@@ -18,6 +18,8 @@
     "argparse",
     "libspng",
     "curl",
-    "libarchive"
-]
+    "libarchive",
+    "zlib",
+    "minizip-ng"
+  ]
 }

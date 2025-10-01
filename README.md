@@ -31,7 +31,7 @@ Regardless of the platform you are on, you will need to install [vcpkg](https://
 
 Or via the command line: (Open a VS Developer Command Prompt)
 ```bash
-cmake --preset x64-windows-<debug/release/dist>
+cmake --preset windows-x64-<debug/release/dist>
 cmake --build build
 ```
 
@@ -43,7 +43,7 @@ sudo apt install libxmu-dev libxi-dev libgl-dev zip autoconf automake libtool pk
 
 Then, run the following commands:
 ```bash
-cmake --preset x64-linux-<debug/release/dist>
+cmake --preset linux-x64-<debug/release/dist>
 cmake --build build
 ```
 Alternatively, without presets:

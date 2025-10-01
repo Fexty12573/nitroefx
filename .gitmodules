@@ -8,3 +8,6 @@
 [submodule "external/embed"]
 	path = external/embed
 	url = https://github.com/batterycenter/embed
+[submodule "external/microtar"]
+	path = external/microtar
+	url = https://github.com/rxi/microtar.git

@@ -1753,27 +1753,27 @@ void Editor::renderBehaviorEditor(SPLResource& res) {
         }
 
         if (NOTIFY(ImGui::MenuItem("Random", nullptr, false, !res.header.flags.hasRandomBehavior))) {
-            res.behaviors.push_back(std::make_shared<SPLRandomBehavior>(glm::vec3(0, 0, 0), 1));
+            res.behaviors.push_back(std::make_shared<SPLRandomBehavior>(glm::vec3(0, 0, 0), 1.0f));
             res.header.addBehavior(SPLBehaviorType::Random);
         }
 
         if (NOTIFY(ImGui::MenuItem("Magnet", nullptr, false, !res.header.flags.hasMagnetBehavior))) {
-            res.behaviors.push_back(std::make_shared<SPLMagnetBehavior>(glm::vec3(0, 0, 0), 0));
+            res.behaviors.push_back(std::make_shared<SPLMagnetBehavior>(glm::vec3(0, 0, 0), 0.0f));
             res.header.addBehavior(SPLBehaviorType::Magnet);
         }
 
         if (NOTIFY(ImGui::MenuItem("Spin", nullptr, false, !res.header.flags.hasSpinBehavior))) {
-            res.behaviors.push_back(std::make_shared<SPLSpinBehavior>(0, SPLSpinAxis::Y));
+            res.behaviors.push_back(std::make_shared<SPLSpinBehavior>(0.0f, SPLSpinAxis::Y));
             res.header.addBehavior(SPLBehaviorType::Spin);
         }
 
         if (NOTIFY(ImGui::MenuItem("Collision Plane", nullptr, false, !res.header.flags.hasCollisionPlaneBehavior))) {
-            res.behaviors.push_back(std::make_shared<SPLCollisionPlaneBehavior>(0, 0, SPLCollisionType::Bounce));
+            res.behaviors.push_back(std::make_shared<SPLCollisionPlaneBehavior>(0.0f, 0.0f, SPLCollisionType::Bounce));
             res.header.addBehavior(SPLBehaviorType::CollisionPlane);
         }
 
         if (NOTIFY(ImGui::MenuItem("Convergence", nullptr, false, !res.header.flags.hasConvergenceBehavior))) {
-            res.behaviors.push_back(std::make_shared<SPLConvergenceBehavior>(glm::vec3(0, 0, 0), 0));
+            res.behaviors.push_back(std::make_shared<SPLConvergenceBehavior>(glm::vec3(0, 0, 0), 0.0f));
             res.header.addBehavior(SPLBehaviorType::Convergence);
         }
 

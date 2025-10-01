@@ -18,8 +18,12 @@
 #include <stb_image.h>
 #include <nlohmann/json.hpp>
 #include <battery/embed.hpp>
-#include <archive.h>
-#include <archive_entry.h>
+#include <zlib.h>
+#include <minizip-ng/mz.h>
+#include <minizip-ng/mz_zip.h>
+#include <minizip-ng/mz_strm.h>
+#include <minizip-ng/mz_zip_rw.h>
+#include <microtar.h>
 #include <chrono>
 #include <ranges>
 #include <regex>
@@ -2285,56 +2289,113 @@ bool Application::downloadToFile(const std::string& url, const std::string& outP
 }
 
 bool Application::extractSingleFile(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath) {
-    archive* a = archive_read_new();
-    archive_read_support_filter_all(a);
-    archive_read_support_format_all(a);
+    if (archivePath.extension() == ".zip") {
+        return extractZip(archivePath, wantedName, outPath);
+    } else if (archivePath.extension() == ".gz" || archivePath.extension() == ".tgz") {
+        return extractTarGz(archivePath, wantedName, outPath);
+    } else {
+        spdlog::error("Unsupported archive format: {}", archivePath.string());
+        return false;
+    }
+}
 
-    if (archive_read_open_filename(a, archivePath.string().c_str(), 10240) != ARCHIVE_OK) {
-        spdlog::error("archive open failed: {}", archive_error_string(a));
-        archive_read_free(a);
+bool Application::extractZip(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath) {
+    int err = MZ_OK;
+
+    void* reader = mz_zip_reader_create();
+    mz_zip_reader_set_encoding(reader, MZ_ENCODING_UTF8);
+
+    if (mz_zip_reader_open_file(reader, archivePath.string().c_str()) != MZ_OK) {
+        spdlog::error("Failed to open zip archive: {}", archivePath.string());
+        mz_zip_reader_delete(&reader);
         return false;
     }
 
-    archive_entry* entry;
-    bool found = false;
+    err = mz_zip_reader_locate_entry(reader, wantedName.c_str(), true);
+    if (err != MZ_OK) {
+        spdlog::error("File '{}' not found in zip archive '{}'", wantedName, archivePath.string());
+        mz_zip_reader_delete(&reader);
+        return false;
+    }
 
-    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
-        const char* name = archive_entry_pathname(entry);
-        if (name && wantedName == name) {
-            std::filesystem::create_directories(outPath.parent_path());
-            std::ofstream out(outPath, std::ios::binary);
-            if (!out) {
-                spdlog::error("cannot create {}", outPath.string());
-                archive_read_free(a);
-                return false;
-            }
+    std::filesystem::create_directories(outPath.parent_path());
 
-            const void* buff; size_t size; la_int64_t offset;
-            while (archive_read_data_block(a, &buff, &size, &offset) == ARCHIVE_OK) {
-                out.write(static_cast<const char*>(buff), size);
-            }
+    err = mz_zip_reader_entry_save_file(reader, outPath.string().c_str());
+    if (err != MZ_OK) {
+        spdlog::error("Failed to extract file '{}' from zip archive '{}'", wantedName, archivePath.string());
+        mz_zip_reader_delete(&reader);
+        return false;
+    }
 
-            out.close();
+    mz_zip_reader_close(reader);
+    mz_zip_reader_delete(&reader);
+
+    return true;
+}
+
+bool Application::extractTarGz(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath) {
+    std::vector<u8> tarData;
+    if (!gunzipFile(archivePath, tarData)) {
+        return false;
+    }
+
+    mtar_t tar{
+        .read = [](mtar_t* tar, void* buf, u32 size) -> int {
+            const auto data = (u8*)tar->stream;
+            u32 toRead = min(size, tar->remaining_data - tar->pos);
+            std::memcpy(buf, data + tar->pos, toRead);
+            tar->pos += toRead;
+            return MTAR_ESUCCESS;
+        },
+        .write = nullptr,
+        .seek = [](mtar_t* tar, u32 offset) -> int { return MTAR_ESUCCESS; },
+        .close = [](mtar_t* tar) -> int { return MTAR_ESUCCESS; },
+        .stream = tarData.data()
+    };
+
+    mtar_header_t header;
+    if (mtar_find(&tar, wantedName.c_str(), &header) != MTAR_ESUCCESS) {
+        spdlog::error("File '{}' not found in tar archive '{}'", wantedName, archivePath.string());
+        return false;
+    }
+    
+    std::filesystem::create_directories(outPath.parent_path());
+
+    std::ofstream out(outPath, std::ios::binary);
+    if (!out) {
+        spdlog::error("Failed to create output file: {}", outPath.string());
+        return false;
+    }
+
+    std::vector<u8> decompressed(header.size);
+    mtar_read_data(&tar, decompressed.data(), header.size);
+    out.write((const char*)decompressed.data(), header.size);
+
+    mtar_close(&tar);
 
 #ifndef _WIN32
-            std::filesystem::permissions(outPath,
-                std::filesystem::perms::owner_exec | std::filesystem::perms::owner_read | std::filesystem::perms::owner_write |
-                std::filesystem::perms::group_exec | std::filesystem::perms::group_read |
-                std::filesystem::perms::others_exec | std::filesystem::perms::others_read,
-                std::filesystem::perm_options::add);
+    std::filesystem::permissions(outPath,
+        std::filesystem::perms::owner_exec | std::filesystem::perms::owner_read | std::filesystem::perms::owner_write |
+        std::filesystem::perms::group_exec | std::filesystem::perms::group_read |
+        std::filesystem::perms::others_exec | std::filesystem::perms::others_read,
+        std::filesystem::perm_options::add);
 #endif
+}
 
-            found = true;
-            break;
-        }
-
-        archive_read_data_skip(a);
+bool Application::gunzipFile(const std::filesystem::path& srcPath, std::vector<u8>& dst) {
+    gzFile f = gzopen(srcPath.string().c_str(), "rb");
+    if (!f) {
+        spdlog::error("Failed to open gzip file: {}", srcPath.string());
+        return false;
     }
 
-    archive_read_free(a);
-    if (!found) {
-        spdlog::error("File '{}' not found in archive '{}'", wantedName, archivePath.string());
+    constexpr auto bufSize = 64 * 1024u;
+    u8 buffer[bufSize];
+    int r;
+    while ((r = gzread(f, buffer, bufSize)) > 0) {
+        dst.insert(dst.end(), buffer, buffer + r);
     }
 
-    return found;
+    gzclose(f);
+    return r >= 0;
 }

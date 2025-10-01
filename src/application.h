@@ -77,7 +77,7 @@ public:
 
     static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
 
-    static constexpr auto VERSION = "v1.2.1";
+    static constexpr auto VERSION = "v1.2.2-rc1";
 
 private:
     void pollEvents();
@@ -129,6 +129,9 @@ private:
     std::optional<nlohmann::json> getUpdateAsset(const std::string& tag);
     bool downloadToFile(const std::string& url, const std::string& outPath);
     bool extractSingleFile(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath);
+    bool extractZip(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath);
+    bool extractTarGz(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath);
+    bool gunzipFile(const std::filesystem::path& srcPath, std::vector<u8>& dst);
 
 private:
     bool m_running = true;
