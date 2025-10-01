@@ -1490,7 +1490,9 @@ void Application::restart() {
         spdlog::error("Failed to restart application: {}", GetLastError());
     }
 #else
-    execv(exePath.string().c_str(), nullptr);
+    auto exePathString = exePath.string();
+    char* const argv[] = { exePathString.data(), nullptr };
+    ::execv(exePathString.c_str(), argv);
 #endif
 
     m_running = false;
@@ -2341,16 +2343,19 @@ bool Application::extractTarGz(const std::filesystem::path& archivePath, const s
 
     mtar_t tar{
         .read = [](mtar_t* tar, void* buf, u32 size) -> int {
-            const auto data = (u8*)tar->stream;
-            u32 toRead = std::min(size, tar->remaining_data - tar->pos);
-            std::memcpy(buf, data + tar->pos, toRead);
-            tar->pos += toRead;
+            const auto stream = static_cast<std::vector<u8>*>(tar->stream);
+            u32 toRead = std::min(size, (u32)stream->size() - tar->pos);
+            std::memcpy(buf, stream->data() + tar->pos, toRead);
             return MTAR_ESUCCESS;
         },
         .write = nullptr,
-        .seek = [](mtar_t* tar, u32 offset) -> int { return MTAR_ESUCCESS; },
+        .seek = [](mtar_t* tar, u32 offset) -> int {
+            const auto stream = static_cast<std::vector<u8>*>(tar->stream);
+            if (offset > stream->size()) return MTAR_ESEEKFAIL;
+            return MTAR_ESUCCESS;
+        },
         .close = [](mtar_t* tar) -> int { return MTAR_ESUCCESS; },
-        .stream = tarData.data()
+        .stream = &tarData
     };
 
     mtar_header_t header;
