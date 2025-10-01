@@ -19,9 +19,9 @@ enum {
 
 class SPLArchive {
 public:
-    explicit SPLArchive(const std::filesystem::path& filename);
-    explicit SPLArchive(std::span<const char> data);
-    SPLArchive();
+    explicit SPLArchive(const std::filesystem::path& filename, bool createGpuTextures = true);
+    explicit SPLArchive(std::span<const char> data, bool createGpuTextures = true);
+    SPLArchive(bool createGpuTextures = true);
 
     static bool isValid(const std::filesystem::path& filename);
     static bool isValid(std::span<const char> data);
@@ -44,8 +44,6 @@ public:
     const std::vector<std::vector<u8>>& getPaletteData() const { return m_paletteData; }
     std::vector<std::vector<u8>>& getPaletteData() { return m_paletteData; }
 
-    u32 getTextureArray() const { return m_textureArray; }
-
     size_t getResourceCount() const { return m_resources.size(); }
     size_t getTextureCount() const { return m_textures.size(); }
 
@@ -56,10 +54,12 @@ public:
 
     void deleteTexture(size_t index);
 
+    void printInfo(std::string_view name) const;
+
     static constexpr u32 SPL_FRAMES_PER_SECOND = 30;
 
 private:
-    void load(std::istream& stream);
+    void load(std::istream& stream, bool createGpuTextures);
     static bool isValid(std::istream& stream);
 
     static SPLResourceHeader fromNative(const SPLResourceHeaderNative& native);
@@ -132,7 +132,6 @@ private:
     std::vector<SPLTexture> m_textures;
     std::vector<std::vector<u8>> m_textureData;
     std::vector<std::vector<u8>> m_paletteData;
-    u32 m_textureArray;
 
     friend struct SPLBehavior;
 };

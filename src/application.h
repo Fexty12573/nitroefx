@@ -77,7 +77,7 @@ public:
 
     static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
 
-    static constexpr auto VERSION = "v1.2.2-rc4";
+    static constexpr auto VERSION = "v1.2.2";
 
 private:
     void pollEvents();
@@ -97,6 +97,7 @@ private:
     void loadIcon();
     void clearTempDir();
     void executeAction(u32 action);
+    void checkArgs(int argc, char** argv);
 
     void restart();
 

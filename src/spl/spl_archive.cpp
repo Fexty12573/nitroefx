@@ -1,5 +1,6 @@
 #include "spl_archive.h"
 #include "gfx/gl_util.h"
+#include "enum_names.h"
 
 #include <GL/glew.h>
 #include <glm/gtc/constants.hpp>
@@ -11,6 +12,7 @@
 #include <ranges>
 #include <span>
 #include <spanstream>
+#include <print>
 
 #include "spl_random.h"
 
@@ -56,17 +58,17 @@ void writePngRgba(const SPLTexture& texture, const std::filesystem::path& file);
 }
 
 
-SPLArchive::SPLArchive(const std::filesystem::path& filename) : m_header() {
+SPLArchive::SPLArchive(const std::filesystem::path& filename, bool createGpuTextures) : m_header() {
     std::ifstream stream(filename, std::ios::binary | std::ios::in);
-    load(stream);
+    load(stream, createGpuTextures);
 }
 
-SPLArchive::SPLArchive(std::span<const char> data) {
+SPLArchive::SPLArchive(std::span<const char> data, bool createGpuTextures) {
     std::ispanstream stream(data);
-    load(stream);
+    load(stream, createGpuTextures);
 }
 
-SPLArchive::SPLArchive() {
+SPLArchive::SPLArchive(bool createGpuTextures) {
     m_header = {
         .magic = SPA_MAGIC,
         .version = SPA_VERSION,
@@ -98,7 +100,9 @@ SPLArchive::SPLArchive() {
     defaultTexture.textureData = std::span<const u8>(DEFAULT_TEXTURE.data(), DEFAULT_TEXTURE.size());
     defaultTexture.paletteData = std::span<const u8>((u8*)DEFAULT_PALETTE.data(), DEFAULT_PALETTE.size() * sizeof(GXRgba));
 
-    defaultTexture.glTexture = std::make_shared<GLTexture>(defaultTexture);
+    if (createGpuTextures) {
+        defaultTexture.glTexture = std::make_shared<GLTexture>(defaultTexture);
+    }
 
     m_textures.push_back(defaultTexture);
 }
@@ -121,7 +125,7 @@ bool SPLArchive::isValid(std::span<const char> data) {
     return isValid(stream);
 }
 
-void SPLArchive::load(std::istream& stream) {
+void SPLArchive::load(std::istream& stream, bool createGpuTextures) {
     stream >> m_header;
 
     if (m_header.magic != SPA_MAGIC) {
@@ -246,7 +250,9 @@ void SPLArchive::load(std::istream& stream) {
             tex.textureData = m_textureData.back();
             tex.paletteData = m_paletteData.back();
 
-            tex.glTexture = std::make_shared<GLTexture>(tex);
+            if (createGpuTextures) {
+                tex.glTexture = std::make_shared<GLTexture>(tex);
+            }
         }
 
         stream.seekg(offset + texRes.resourceSize, std::ios::beg);
@@ -384,11 +390,6 @@ void SPLArchive::exportTextures(const std::filesystem::path& directory, const st
     }
 
     for (const auto [i, tex] : std::views::enumerate(m_textures)) {
-        if (!tex.glTexture) {
-            spdlog::warn("Texture {} does not have a GL texture, skipping export", i);
-            continue;
-        }
-
         const auto fileName = fmt::format("{}.png", i);
         std::filesystem::path path = directory / fileName;
         if (std::filesystem::exists(path)) {
@@ -401,16 +402,8 @@ void SPLArchive::exportTextures(const std::filesystem::path& directory, const st
             }
         }
 
-        const auto rgba = tex.convertToRGBA8888();
-        if (!rgba.empty()) {
-            if (stbi_write_png(path.string().c_str(), tex.width, tex.height, 4, rgba.data(), tex.width * 4)) {
-                spdlog::info("Exported texture {} to {}", i, path.string());
-            } else {
-                spdlog::error("Failed to write texture {} to {}", i, path.string());
-            }
-        } else {
-            spdlog::error("Failed to convert texture {} to RGBA8888", i);
-        }
+        spdlog::info("Exporting texture {} to {}", i, path.string());
+        writePng(tex, path);
     }
 }
 
@@ -421,11 +414,6 @@ void SPLArchive::exportTexture(size_t index, const std::filesystem::path& file) 
     }
 
     const auto& tex = m_textures[index];
-    if (!tex.glTexture) {
-        spdlog::warn("Texture {} does not have a GL texture, skipping export", index);
-        return;
-    }
-
     int ok = -1;
     
     const auto ext = file.extension().string();
@@ -510,6 +498,28 @@ void SPLArchive::deleteTexture(size_t index) {
     m_header.texCount = (u16)m_textures.size();
 
     spdlog::info("Deleted texture {}", index);
+}
+
+void SPLArchive::printInfo(std::string_view name) const {
+    std::println("Archive Info for {}", name);
+    std::println("Resources: {}", m_resources.size());
+    std::println("Textures: {}", m_textures.size());
+    std::println();
+
+    using namespace detail;
+    for (const auto [i, tex] : std::views::enumerate(m_textures)) {
+        std::println("Texture {}:", i);
+        std::println("  Size: {}x{}", tex.width, tex.height);
+        std::println("  Format: {}", getTextureFormat(tex.param.format));
+        std::println("  Repeat: {}", getTextureRepeat(tex.param.repeat));
+        std::println("  Flip: {}", getTextureFlip(tex.param.flip));
+        std::println("  Palette color 0 transparent: {}", tex.param.palColor0Transparent ? "Yes" : "No");
+        std::println("  Uses shared texture: {}", tex.param.useSharedTexture ? "Yes" : "No");
+        if (tex.param.useSharedTexture) {
+            std::println("  Shared texture ID: {}", tex.param.sharedTexID);
+        }
+        std::println();
+    }
 }
 
 SPLResourceHeader SPLArchive::fromNative(const SPLResourceHeaderNative &native) {

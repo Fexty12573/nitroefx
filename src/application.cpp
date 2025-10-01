@@ -177,17 +177,6 @@ int Application::run(int argc, char** argv) {
     m_updateWindowId = ImHashStr("Update##Application");
     m_welcomeWindowId = ImHashStr("Welcome##Application");
 
-    if (argc > 1) {
-        const std::filesystem::path arg = argv[1];
-        if (std::filesystem::is_directory(arg)) {
-            g_projectManager->openProject(arg);
-        } else if (arg.extension() == ".spa") {
-            g_projectManager->openEditor(arg);
-        } else {
-            spdlog::warn("Invalid argument: {}", arg.string());
-        }
-    }
-
     std::chrono::time_point<std::chrono::high_resolution_clock> lastFrame = std::chrono::high_resolution_clock::now();
 
     while (m_running) {
@@ -212,6 +201,7 @@ int Application::run(int argc, char** argv) {
         // Build default docking layout once if no ini file exists
         if (!m_layoutInitialized) {
             initDefaultDockingLayout();
+            checkArgs(argc, argv);
         }
 
         ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"));
@@ -282,18 +272,66 @@ int Application::run(int argc, char** argv) {
     return 0;
 }
 
-int Application::runCli(argparse::ArgumentParser &cli) {
-    if (!cli.is_subcommand_used("cli")) {
-        spdlog::error("This application is not running in CLI mode");
+int Application::runCli(argparse::ArgumentParser &parser) {
+    if (parser.is_subcommand_used("export")) {
+        const auto& cmd = parser.at<argparse::ArgumentParser>("export");
+        const auto output = cmd.get<std::string>("--output");
+        const auto indices = cmd.get<std::vector<int>>("--index");
+
+        std::filesystem::path filePath(cmd.get<std::string>("path"));
+        if (!SPLArchive::isValid(filePath)) {
+            spdlog::error("Invalid SPL file: {}", filePath.string());
+            return 1;
+        }
+
+        SPLArchive archive(filePath, /* createGpuTextures */ false);
+
+        std::filesystem::path outputPath = output.empty() ? std::filesystem::current_path() : output;
+
+        if (indices.empty()) {
+            std::filesystem::create_directories(outputPath);
+            archive.exportTextures(outputPath);
+            spdlog::info("Exported {} textures to {}", archive.getTextureCount(), outputPath.string());
+            return 0;
+        }
+
+        if (indices.size() == 1) {
+            const int index = indices[0];
+            if (index < 0 || static_cast<size_t>(index) >= archive.getTextureCount()) {
+                spdlog::error("Invalid texture index: {}", index);
+                return 1;
+            }
+
+            if (std::filesystem::is_directory(outputPath)) {
+                std::string filename = fmt::format("texture_{}.png", index);
+                outputPath /= filename;
+            }
+
+            archive.exportTexture(index, outputPath);
+            spdlog::info("Exported texture {} to {}", index, outputPath.string());
+            return 0;
+        }
+
+        if (std::filesystem::is_regular_file(outputPath)) {
+            spdlog::error("Output path must be a directory when exporting multiple textures");
+            return 1;
+        }
+
+        std::filesystem::create_directories(outputPath);
+        archive.exportTextures(outputPath);
+    } else if (parser.is_subcommand_used("info")) {
+        const auto& cmd = parser.at<argparse::ArgumentParser>("info");
+        std::filesystem::path filePath(cmd.get<std::string>("path"));
+        if (!SPLArchive::isValid(filePath)) {
+            spdlog::error("Invalid SPL file: {}", filePath.string());
+            return 1;
+        }
+
+        SPLArchive archive(filePath, /* createGpuTextures */ false);
+        archive.printInfo(filePath.filename().string());
+    } else {
+        spdlog::error("No subcommand specified");
         return 1;
-    }
-
-    if (cli.get<bool>("--export")) {
-        const auto format = cli.get<std::string>("--format");
-        const auto output = cli.get<std::string>("--output");
-        const auto indices = cli.get<std::vector<int>>("--index");
-
-        SPLArchive archive(std::filesystem::path(cli.get<std::string>("path")));
     }
 
     return 0;
@@ -1485,6 +1523,21 @@ void Application::executeAction(u32 action) {
     case ApplicationAction::ResetCamera:
         m_editor->resetCamera();
         break;
+    }
+}
+
+void Application::checkArgs(int argc, char** argv) {
+    if (argc > 1) {
+        const std::filesystem::path arg = argv[1];
+        if (std::filesystem::is_directory(arg)) {
+            g_projectManager->openProject(arg);
+        }
+        else if (arg.extension() == ".spa") {
+            g_projectManager->openEditor(arg);
+        }
+        else {
+            spdlog::warn("Invalid argument: {}", arg.string());
+        }
     }
 }
 

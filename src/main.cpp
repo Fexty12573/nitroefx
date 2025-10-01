@@ -4,37 +4,41 @@
 #include <spdlog/spdlog.h>
 
 int nitroefx_main(int argc, char** argv) {
-    // -- GUI Mode
-    // $ nitroefx
-    // $ nitroefx <path>
+    constexpr auto EXPORT_CMD = "export";
+    constexpr auto INFO_CMD = "info";
+    const auto isSubCmd = [](std::string_view arg) {
+        return arg == EXPORT_CMD || arg == INFO_CMD;
+    };
 
-    // -- CLI Mode
-    // $ nitroefx cli <options>
-
-    if (argc == 1) {
-        // No arguments provided, start in GUI mode
+    if (argc <= 1 || std::filesystem::exists(argv[1])) {
+        // No subcommands used, launch GUI
         Application app;
         return app.run(argc, argv);
     }
 
-    argparse::ArgumentParser program("nitroefx");
+    argparse::ArgumentParser program("nitroefx", Application::VERSION);
     
-    // Optional path for GUI mode
-    //program.add_argument("path").help("Optional path for GUI mode");
+    program.add_argument("--apply-update").nargs(3).help("Internal use only.");
+    program.add_argument("--relaunch").flag().help("Internal use only.");
 
-    program.add_argument("--apply-update").nargs(3);
-    program.add_argument("--relaunch").default_value(false).implicit_value(true);
-
-    // Subcommand for CLI
-    argparse::ArgumentParser cli("cli", "Command Line Interface for nitroefx");
-    cli.add_argument("path").help("Path to a .spa file").required().nargs(1);
-    cli.add_argument("-e", "--export").help("Export textures").default_value(false).implicit_value(true);
-    cli.add_argument("-i", "--index").help("Texture index to export").nargs(argparse::nargs_pattern::at_least_one).scan<'i', int>();
-    cli.add_argument("-f", "--format").help("Export format (png, bmp, tga). Default is png").nargs(1);
-    cli.add_argument("-o", "--output").help("Output path."
+    argparse::ArgumentParser export_cmd(EXPORT_CMD);
+    export_cmd.add_argument("path").help("Path to a .spa file").required().nargs(1);
+    export_cmd.add_argument("-i", "--index").help("Texture index to export").nargs(argparse::nargs_pattern::at_least_one).scan<'i', int>();
+    export_cmd.add_argument("-o", "--output").help("Output path."
         " Can be a directory (always) or a file path (only when used with a single index -i)").nargs(1);
 
-    program.add_subparser(cli);
+    export_cmd.add_description("\nExamples:\n"
+        "  nitroefx export path/to/file.spa\n"
+        "  nitroefx export -i 1 3 4 -o /output/directory path/to/file.spa \n"
+        "  nitroefx export -i 0 -o /output/directory/texture.png path/to/file.spa \n");
+
+    argparse::ArgumentParser info_cmd(INFO_CMD);
+    info_cmd.add_argument("path").help("Path to a .spa file").required().nargs(1);
+    info_cmd.add_description("\nExamples:\n"
+        "  nitroefx info path/to/file.spa\n");
+
+    program.add_subparser(export_cmd);
+    program.add_subparser(info_cmd);
 
     try {
         program.parse_args(argc, argv);
@@ -55,9 +59,9 @@ int nitroefx_main(int argc, char** argv) {
     }
 
     Application app;
-    if (program.is_subcommand_used("cli")) {
-        return app.runCli(cli);
-    } else {
+    if (!isSubCmd(argv[1])) {
         return app.run(argc, argv);
     }
+
+    return app.runCli(program);
 }
