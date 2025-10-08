@@ -22,6 +22,7 @@ find_package(SPNG CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(minizip-ng CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(efsw CONFIG REQUIRED)
 add_subdirectory(external/narc)
 add_subdirectory(external/embed)
 
@@ -86,6 +87,7 @@ target_link_libraries(nitroefx PRIVATE
     CURL::libcurl_static
     ZLIB::ZLIB
     MINIZIP::minizip-ng
+    efsw::efsw
     ${IMAGEQUANT_LIB})
 
 if (WIN32)

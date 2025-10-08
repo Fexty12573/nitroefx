@@ -5,6 +5,7 @@
 #include <SDL3/SDL_events.h>
 #include <narc/narc.h>
 #include <narc/defs/fatb.h>
+#include <efsw/efsw.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -12,6 +13,7 @@
 #include <span>
 #include <ranges>
 #include <vector>
+#include <unordered_map>
 
 class Editor;
 
@@ -123,6 +125,62 @@ private:
         CreateFile
     };
 
+    // ---------------- Directory Cache -----------------
+    struct CachedEntry {
+        std::filesystem::path path;
+        bool isDirectory;
+    };
+
+    struct PathHash {
+        size_t operator()(const std::filesystem::path& p) const noexcept {
+            return std::hash<std::string>()(p.generic_string());
+        }
+    };
+
+    void buildDirectoryCache(const std::filesystem::path& directory);
+    void ensureDirectoryCached(const std::filesystem::path& directory) {
+        if (!m_directoryCache.contains(directory)) {
+            buildDirectoryCache(directory);
+        }
+    }
+
+    static void sortCached(std::vector<CachedEntry>& entries);
+
+    void onFileAdded(const std::filesystem::path& parentDir, const std::string& name);
+    void onFileDeleted(const std::filesystem::path& parentDir, const std::string& name);
+    void onFileModified(const std::filesystem::path& file);
+    void onFileMoved(const std::filesystem::path& parentDir, const std::string& oldName, const std::string& newName);
+
+    class FileWatchListener : public efsw::FileWatchListener {
+    public:
+        FileWatchListener(ProjectManager* projManager) : m_projManager(projManager) {}
+
+        void handleFileAction(efsw::WatchID watchId, const std::string& dir,
+            const std::string& filename, efsw::Action action, std::string oldFilename) override {
+            if (!m_projManager) return;
+            const std::filesystem::path parentDir(dir);
+            switch (action) {
+            case efsw::Action::Add:
+                m_projManager->onFileAdded(parentDir, filename);
+                break;
+            case efsw::Action::Delete:
+                m_projManager->onFileDeleted(parentDir, filename);
+                break;
+            case efsw::Action::Modified:
+                m_projManager->onFileModified(parentDir / filename);
+                break;
+            case efsw::Action::Moved:
+                m_projManager->onFileMoved(parentDir, oldFilename, filename);
+                break;
+            }
+        }
+
+    private:
+        ProjectManager* m_projManager;
+    };
+
+    friend class FileWatchListener;
+
 private:
     Editor* m_mainEditor;
     std::filesystem::path m_projectPath;
@@ -132,6 +190,11 @@ private:
     fatb_meta* m_fatbMeta;
     fatb_entry* m_fatb;
     char* m_fimg;
+
+    // Directory cache
+    std::unique_ptr<efsw::FileWatcher> m_watcher;
+    std::unique_ptr<FileWatchListener> m_listener;
+    std::unordered_map<std::filesystem::path, std::vector<CachedEntry>, PathHash> m_directoryCache;
 
     std::vector<std::shared_ptr<EditorInstance>> m_openEditors;
     std::shared_ptr<EditorInstance> m_activeEditor;

@@ -15,6 +15,8 @@
 
 void ProjectManager::init(Editor* editor) {
     m_mainEditor = editor;
+    m_watcher = std::make_unique<efsw::FileWatcher>();
+    m_listener = std::make_unique<FileWatchListener>(this);
 }
 
 void ProjectManager::openProject(const std::filesystem::path& path) {
@@ -43,6 +45,18 @@ void ProjectManager::openProject(const std::filesystem::path& path) {
     }
 
     m_projectPath = path;
+
+    // Reset cache and watcher
+    m_directoryCache.clear();
+    if (std::filesystem::exists(m_projectPath)) {
+        buildDirectoryCache(m_projectPath);
+        try {
+            m_watcher->addWatch(m_projectPath.string(), m_listener.get(), true);
+            m_watcher->watch();
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to add file watch: {}", e.what());
+        }
+    }
 }
 
 void ProjectManager::closeProject(bool force) {
@@ -56,6 +70,7 @@ void ProjectManager::closeProject(bool force) {
         m_activeEditor.reset();
         m_projectPath.clear();
         m_openEditors.clear();
+        m_directoryCache.clear();
     }
 }
 
@@ -197,13 +212,20 @@ void ProjectManager::render() {
                     }
                 }
             } else {
-                for (const auto& entry : std::filesystem::directory_iterator(m_projectPath)) {
-                    if (entry.is_directory()) {
-                        renderDirectory(entry.path());
-                    } else {
-                        if (m_searchString.empty() || entry.path().filename().string().contains(m_searchString)) {
-                            renderFile(entry.path());
+                ensureDirectoryCached(m_projectPath);
+                auto& entries = m_directoryCache[m_projectPath];
+                for (const auto& entry : entries) {
+                    if (!m_searchString.empty() && !entry.isDirectory) {
+                        const auto name = entry.path.filename().string();
+                        if (!name.contains(m_searchString)) {
+                            continue;
                         }
+                    }
+
+                    if (entry.isDirectory) {
+                        renderDirectory(entry.path);
+                    } else {
+                        renderFile(entry.path);
                     }
                 }
             }
@@ -267,11 +289,12 @@ void ProjectManager::openTempEditor(size_t narcIndex) {
 
 void ProjectManager::renderDirectory(const std::filesystem::path& path) {
     const auto text = fmt::format(ICON_FA_FOLDER " {}", path.filename().string());
-    const bool open = ImGui::TreeNodeEx(text.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+    const bool open = ImGui::TreeNodeEx(text.c_str(), flags);
 
     if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight)) {
         if (ImGui::MenuItem("New file")) {
-            // Arm inline new-file editor in this directory
             m_inlineMode = InlineEditMode::CreateFile;
             m_inlineEditTargetDir = path;
             m_inlineEditBuffer[0] = '\0';
@@ -282,13 +305,20 @@ void ProjectManager::renderDirectory(const std::filesystem::path& path) {
     }
 
     if (open) {
-        for (const auto& entry : std::filesystem::directory_iterator(path)) {
-            if (entry.is_directory()) {
-                renderDirectory(entry.path());
-            } else {
-                if (m_searchString.empty() || entry.path().string().contains(m_searchString)) {
-                    renderFile(entry.path());
+        ensureDirectoryCached(path);
+        auto& children = m_directoryCache[path];
+        for (const auto& child : children) {
+            if (!m_searchString.empty() && !child.isDirectory) {
+                const auto name = child.path.filename().string();
+                if (!name.contains(m_searchString)) {
+                    continue;
                 }
+            }
+
+            if (child.isDirectory) {
+                renderDirectory(child.path);
+            } else {
+                renderFile(child.path);
             }
         }
 
@@ -309,6 +339,7 @@ void ProjectManager::renderDirectory(const std::filesystem::path& path) {
                     const auto newPath = path / name;
                     if (!std::filesystem::exists(newPath)) {
                         SPLArchive::saveDefault(newPath);
+                        onFileAdded(path, name);
                         openEditor(newPath);
                     }
                 }
@@ -316,8 +347,8 @@ void ProjectManager::renderDirectory(const std::filesystem::path& path) {
                 cancelInlineEdit();
             }
 
-            const bool active = ImGui::IsItemActive();
-            if ((active && ImGui::IsKeyPressed(ImGuiKey_Escape)) || (!active && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) {
+            const bool deactivated = ImGui::IsItemDeactivated();
+            if (deactivated && (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Left))) {
                 cancelInlineEdit();
             }
 
@@ -345,6 +376,7 @@ void ProjectManager::renderFile(const std::filesystem::path& path) {
     const bool isRenamingThis = (m_inlineMode == InlineEditMode::RenameFile && m_inlineEditPathOld == path);
     if (isRenamingThis) {
         ImGui::PushItemWidth(-1);
+
         if (m_inlineEditFocusRequested) {
             ImGui::SetKeyboardFocusHere();
             m_inlineEditFocusRequested = false;
@@ -361,9 +393,19 @@ void ProjectManager::renderFile(const std::filesystem::path& path) {
                     spdlog::error("Rename failed: {}", ec.message());
                 } else {
                     m_mainEditor->onEditorRenamed(path, newPath);
+                    onFileMoved(path.parent_path(), path.filename().string(), name);
                 }
             }
+
+            cancelInlineEdit();
         }
+
+        const bool deactivated = ImGui::IsItemDeactivated();
+        if (deactivated && (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Left))) {
+            cancelInlineEdit();
+        }
+
+        ImGui::PopItemWidth();
     } else {
         if (ImGui::Selectable(text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
@@ -397,6 +439,7 @@ void ProjectManager::renderFile(const std::filesystem::path& path) {
         if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete")) {
             spdlog::info("Deleting file: {}", path.string());
             std::filesystem::remove(path);
+            onFileDeleted(path.parent_path(), path.filename().string());
         }
 
         ImGui::EndPopup();
@@ -455,4 +498,100 @@ void ProjectManager::cancelInlineEdit() {
     m_inlineEditTargetDir.clear();
     m_inlineEditBuffer[0] = '\0';
     m_inlineEditFocusRequested = false;
+}
+
+void ProjectManager::buildDirectoryCache(const std::filesystem::path& directory) {
+    std::vector<CachedEntry> entries;
+    if (!std::filesystem::exists(directory)) {
+        m_directoryCache.erase(directory);
+        return;
+    }
+
+    std::error_code ec;
+    for (const auto& dirEntry : std::filesystem::directory_iterator(directory, ec)) {
+        if (ec) break;
+        CachedEntry e{ dirEntry.path(), dirEntry.is_directory() };
+        entries.push_back(std::move(e));
+    }
+
+    sortCached(entries);
+    m_directoryCache[directory] = std::move(entries);
+}
+
+void ProjectManager::sortCached(std::vector<CachedEntry>& entries) {
+    std::ranges::sort(entries, [](const CachedEntry& a, const CachedEntry& b) {
+        if (a.isDirectory != b.isDirectory) return a.isDirectory > b.isDirectory; // dirs first
+        return a.path.filename().string() < b.path.filename().string();
+    });
+}
+
+void ProjectManager::onFileAdded(const std::filesystem::path& parentDir, const std::string& name) {
+    const auto it = m_directoryCache.find(parentDir);
+    if (it == m_directoryCache.end()) {
+        return; // parent is not cached yet, ignore event
+    }
+
+    const auto fullPath = parentDir / name;
+    if (!std::filesystem::exists(fullPath)) {
+        return;
+    }
+
+    auto& vec = it->second;
+    if (std::ranges::any_of(vec, [&](const CachedEntry& e) { return e.path == fullPath; })) {
+        return; // already in cache
+    }
+
+    vec.emplace_back(fullPath, std::filesystem::is_directory(fullPath));
+    sortCached(vec);
+}
+
+void ProjectManager::onFileDeleted(const std::filesystem::path& parentDir, const std::string& name) {
+    const auto it = m_directoryCache.find(parentDir);
+    if (it == m_directoryCache.end()) {
+        return; // parent is not cached yet, ignore event
+    }
+
+    const auto fullPath = parentDir / name;
+    auto& vec = it->second;
+    vec.erase(std::remove_if(vec.begin(), vec.end(), [&](const CachedEntry& e) {
+        return e.path == fullPath;
+    }), vec.end());
+
+    m_directoryCache.erase(fullPath);
+}
+
+void ProjectManager::onFileModified(const std::filesystem::path& file) {
+    (void)file;
+    // TODO: Maybe consider asking editors to reload?
+}
+
+void ProjectManager::onFileMoved(const std::filesystem::path& parentDir, const std::string& oldName, const std::string& newName) {
+    const auto it = m_directoryCache.find(parentDir);
+    if (it == m_directoryCache.end()) {
+        return; // parent is not cached yet, ignore event
+    }
+
+    const auto oldPath = parentDir / oldName;
+    const auto newPath = parentDir / newName;
+
+    auto& vec = it->second;
+    for (auto& e : vec) {
+        if (e.path == oldPath) {
+            const bool wasDir = e.isDirectory;
+            e.path = newPath;
+            e.isDirectory = std::filesystem::is_directory(newPath);
+            if (wasDir) {
+                // Move children cache (rename key)
+                auto childCacheIt = m_directoryCache.find(oldPath);
+                if (childCacheIt != m_directoryCache.end()) {
+                    m_directoryCache[newPath] = std::move(childCacheIt->second);
+                    m_directoryCache.erase(childCacheIt);
+                }
+            }
+
+            break;
+        }
+    }
+
+    sortCached(vec);
 }
