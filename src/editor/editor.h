@@ -37,6 +37,7 @@ public:
     void openTutorial();
 
     void onEditorOpened(const std::shared_ptr<EditorInstance>& editor);
+    void onEditorRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
 
     void playEmitter(EmitterSpawnType spawnType);
     void playAllEmitters(EmitterSpawnType spawnType);

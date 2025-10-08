@@ -65,7 +65,12 @@ public:
     EditorActionType undo();
     EditorActionType redo();
 
+
     std::string getName() const;
+
+    void rename(const std::filesystem::path& to) {
+        m_path = to;
+    }
 
     const std::filesystem::path& getPath() const {
         return m_path;

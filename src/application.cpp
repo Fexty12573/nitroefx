@@ -156,6 +156,7 @@ int Application::run(int argc, char** argv) {
 
     m_editor = std::make_unique<Editor>();
     m_settings = ApplicationSettings::getDefault();
+    g_projectManager->init(m_editor.get());
 
     clearTempDir();
     loadConfig();
@@ -286,7 +287,7 @@ int Application::runCli(argparse::ArgumentParser &parser) {
 
         SPLArchive archive(filePath, /* createGpuTextures */ false);
 
-        std::filesystem::path outputPath = output.empty() ? std::filesystem::current_path() : output;
+        std::filesystem::path outputPath = output.empty() ? std::filesystem::current_path() : std::filesystem::path(output);
 
         if (indices.empty()) {
             std::filesystem::create_directories(outputPath);

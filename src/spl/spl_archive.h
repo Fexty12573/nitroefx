@@ -26,6 +26,8 @@ public:
     static bool isValid(const std::filesystem::path& filename);
     static bool isValid(std::span<const char> data);
 
+    static void saveDefault(const std::filesystem::path& filename);
+
     const SPLResource& getResource(size_t index) const { return m_resources[index]; }
     SPLResource& getResource(size_t index) { return m_resources[index]; }
 

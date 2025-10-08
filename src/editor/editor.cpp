@@ -324,6 +324,13 @@ void Editor::onEditorOpened(const std::shared_ptr<EditorInstance> &editor) {
     }
 }
 
+void Editor::onEditorRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath) {
+    const auto editor = g_projectManager->getEditor(oldPath);
+    if (editor) {
+        editor->rename(newPath);
+    }
+}
+
 void Editor::save() {
     const auto& editor = g_projectManager->getActiveEditor();
     if (!editor) {

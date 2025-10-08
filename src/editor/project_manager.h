@@ -13,10 +13,12 @@
 #include <ranges>
 #include <vector>
 
+class Editor;
 
 // Project is a bit of an overstatement here, because it's really just a directory
 class ProjectManager {
 public:
+    void init(Editor* editor);
     void openProject(const std::filesystem::path& path);
     void closeProject(bool force = false);
     void openEditor(const std::filesystem::path& path);
@@ -113,7 +115,16 @@ private:
     void renderFile(const std::filesystem::path& path);
     void renderNarcFile(const std::string& name, size_t index);
 
+    void cancelInlineEdit();
+
+    enum class InlineEditMode {
+        None,
+        RenameFile,
+        CreateFile
+    };
+
 private:
+    Editor* m_mainEditor;
     std::filesystem::path m_projectPath;
     bool m_isNarc;
     narc* m_narc;
@@ -134,6 +145,13 @@ private:
     std::filesystem::path m_contextMenuPath;
     std::filesystem::path m_selectedFile;
     std::string m_searchString;
+
+    // Inline editing
+    InlineEditMode m_inlineMode = InlineEditMode::None;
+    std::filesystem::path m_inlineEditPathOld;
+    std::filesystem::path m_inlineEditTargetDir;
+    char m_inlineEditBuffer[256] = { 0 };
+    bool m_inlineEditFocusRequested = false;
 
     static inline const std::unordered_set<std::string> s_spaExtensions = {
         ".spa",

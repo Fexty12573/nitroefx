@@ -10,7 +10,12 @@
 #include <spdlog/spdlog.h>
 #include <narc/narc.h>
 #include <narc/defs/fimg.h>
+#include <fstream>
 
+
+void ProjectManager::init(Editor* editor) {
+    m_mainEditor = editor;
+}
 
 void ProjectManager::openProject(const std::filesystem::path& path) {
     if (hasProject()) {
@@ -75,7 +80,7 @@ void ProjectManager::openEditor(const std::filesystem::path& path) {
 
     m_openEditors.push_back(editor);
     
-    g_application->getEditor()->onEditorOpened(editor);
+    m_mainEditor->onEditorOpened(editor);
 }
 
 void ProjectManager::openEditor() {
@@ -85,7 +90,7 @@ void ProjectManager::openEditor() {
     m_activeEditor = editor;
     m_forceActivate = true;
 
-    g_application->getEditor()->onEditorOpened(editor);
+    m_mainEditor->onEditorOpened(editor);
 }
 
 void ProjectManager::openTempEditor(const std::filesystem::path& path) {
@@ -107,7 +112,7 @@ void ProjectManager::openTempEditor(const std::filesystem::path& path) {
     m_openEditors.push_back(editor);
     m_activeEditor = editor;
 
-    g_application->getEditor()->onEditorOpened(editor);
+    m_mainEditor->onEditorOpened(editor);
 }
 
 void ProjectManager::openNarcProject(const std::filesystem::path& path) {
@@ -266,15 +271,12 @@ void ProjectManager::renderDirectory(const std::filesystem::path& path) {
 
     if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight)) {
         if (ImGui::MenuItem("New file")) {
-            ImGui::CloseCurrentPopup();
-            ImGui::OpenPopup("New file##ProjectManager");
+            // Arm inline new-file editor in this directory
+            m_inlineMode = InlineEditMode::CreateFile;
+            m_inlineEditTargetDir = path;
+            m_inlineEditBuffer[0] = '\0';
+            m_inlineEditFocusRequested = true;
         }
-
-        ImGui::EndPopup();
-    }
-
-    if (ImGui::BeginPopup("New file##ProjectManager")) {
-        ImGui::Text("New file");
 
         ImGui::EndPopup();
     }
@@ -288,6 +290,39 @@ void ProjectManager::renderDirectory(const std::filesystem::path& path) {
                     renderFile(entry.path());
                 }
             }
+        }
+
+        if (m_inlineMode == InlineEditMode::CreateFile && m_inlineEditTargetDir == path) {
+            ImGui::Indent(40.0f);
+            ImGui::PushItemWidth(-1);
+
+            if (m_inlineEditFocusRequested) {
+                ImGui::SetKeyboardFocusHere();
+                m_inlineEditFocusRequested = false;
+            }
+
+            if (ImGui::InputTextWithHint("##newFile_name", "New file name...",
+                m_inlineEditBuffer, IM_ARRAYSIZE(m_inlineEditBuffer),
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+                const std::string name{ m_inlineEditBuffer };
+                if (!name.empty()) {
+                    const auto newPath = path / name;
+                    if (!std::filesystem::exists(newPath)) {
+                        SPLArchive::saveDefault(newPath);
+                        openEditor(newPath);
+                    }
+                }
+
+                cancelInlineEdit();
+            }
+
+            const bool active = ImGui::IsItemActive();
+            if ((active && ImGui::IsKeyPressed(ImGuiKey_Escape)) || (!active && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) {
+                cancelInlineEdit();
+            }
+
+            ImGui::PopItemWidth();
+            ImGui::Unindent(40.0f);
         }
 
         ImGui::TreePop();
@@ -306,13 +341,40 @@ void ProjectManager::renderFile(const std::filesystem::path& path) {
     }
 
     ImGui::Indent(40.0f);
-    if (ImGui::Selectable(text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-            openEditor(path);
-        } else {
-            openTempEditor(path);
+
+    const bool isRenamingThis = (m_inlineMode == InlineEditMode::RenameFile && m_inlineEditPathOld == path);
+    if (isRenamingThis) {
+        ImGui::PushItemWidth(-1);
+        if (m_inlineEditFocusRequested) {
+            ImGui::SetKeyboardFocusHere();
+            m_inlineEditFocusRequested = false;
+        }
+
+        if (ImGui::InputText("##rename", m_inlineEditBuffer, IM_ARRAYSIZE(m_inlineEditBuffer),
+            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+            const std::string name{ m_inlineEditBuffer };
+            if (!name.empty()) {
+                const auto newPath = path.parent_path() / name;
+                std::error_code ec;
+                std::filesystem::rename(path, newPath, ec);
+                if (ec) {
+                    spdlog::error("Rename failed: {}", ec.message());
+                } else {
+                    m_mainEditor->onEditorRenamed(path, newPath);
+                }
+            }
+        }
+    } else {
+        if (ImGui::Selectable(text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                openEditor(path);
+            }
+            else {
+                openTempEditor(path);
+            }
         }
     }
+    
     ImGui::Unindent(40.0f);
 
     if (!isSplFile) {
@@ -323,6 +385,13 @@ void ProjectManager::renderFile(const std::filesystem::path& path) {
     if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight)) {
         if (ImGui::MenuItemIcon(ICON_FA_FILE_IMPORT, "Open")) {
             openEditor(path);
+        }
+
+        if (ImGui::MenuItemIcon(ICON_FA_PEN_TO_SQUARE, "Rename")) {
+            m_inlineMode = InlineEditMode::RenameFile;
+            m_inlineEditPathOld = path;
+            std::snprintf(m_inlineEditBuffer, IM_ARRAYSIZE(m_inlineEditBuffer), "%s", path.filename().string().c_str());
+            m_inlineEditFocusRequested = true;
         }
 
         if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete")) {
@@ -378,4 +447,12 @@ void ProjectManager::renderNarcFile(const std::string& name, size_t index) {
 
         ImGui::EndPopup();
     }
+}
+
+void ProjectManager::cancelInlineEdit() {
+    m_inlineMode = InlineEditMode::None;
+    m_inlineEditPathOld.clear();
+    m_inlineEditTargetDir.clear();
+    m_inlineEditBuffer[0] = '\0';
+    m_inlineEditFocusRequested = false;
 }

@@ -125,6 +125,11 @@ bool SPLArchive::isValid(std::span<const char> data) {
     return isValid(stream);
 }
 
+void SPLArchive::saveDefault(const std::filesystem::path& filename) {
+    SPLArchive archive(false);
+    archive.save(filename);
+}
+
 void SPLArchive::load(std::istream& stream, bool createGpuTextures) {
     stream >> m_header;
 
