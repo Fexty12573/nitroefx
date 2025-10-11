@@ -878,6 +878,25 @@ void Application::renderPreferences() {
 
         m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
 
+        ImGui::SeparatorText("Clear...");
+        if (ImGui::Button("Cache")) {
+            clearCache();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Temporary Files")) {
+            clearTempDir();
+        }
+
+        if (ImGui::Button("Recent Projects")) {
+            m_recentProjects.clear();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Recent Files")) {
+            m_recentFiles.clear();
+        }
+
         ImGui::SeparatorText("Keybinds");
 
         if (ImGui::BeginTable("Keybinds##Application", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH)) {
@@ -1583,6 +1602,20 @@ void Application::checkArgs(int argc, char** argv) {
         else {
             spdlog::warn("Invalid argument: {}", arg.string());
         }
+    }
+}
+
+void Application::clearCache() {
+    spdlog::info("Clearing cache directory...");
+    const auto cachePath = getCachePath();
+    if (!std::filesystem::exists(cachePath)) {
+        spdlog::info("Cache path does not exist, creating: {}", cachePath.string());
+        std::filesystem::create_directories(cachePath);
+        return;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(cachePath)) {
+        std::filesystem::remove_all(entry.path());
     }
 }
 

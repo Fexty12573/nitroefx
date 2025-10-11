@@ -99,6 +99,7 @@ private:
     void clearTempDir();
     void executeAction(u32 action);
     void checkArgs(int argc, char** argv);
+    void clearCache();
 
     void restart();
 
