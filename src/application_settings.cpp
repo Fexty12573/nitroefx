@@ -17,7 +17,8 @@ ApplicationSettings ApplicationSettings::getDefault() {
             { ApplicationAction::PlayEmitterLooped, { KeybindType::Key, { SDLK_P, SDL_KMOD_CTRL | SDL_KMOD_SHIFT } } },
             { ApplicationAction::PlayAllEmitters, { KeybindType::Key, { SDLK_A, SDL_KMOD_CTRL } } },
             { ApplicationAction::KillEmitters, { KeybindType::Key, { SDLK_K, SDL_KMOD_CTRL } } },
-            { ApplicationAction::ResetCamera, { KeybindType::Key, { SDLK_R, SDL_KMOD_CTRL } } }
+            { ApplicationAction::ResetCamera, { KeybindType::Key, { SDLK_R, SDL_KMOD_CTRL } } },
+            { ApplicationAction::QuickOpen, { KeybindType::Key, { SDLK_T, SDL_KMOD_CTRL } } },
         },
         .checkForUpdates = true,
         .showReleaseCandidates = false

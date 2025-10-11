@@ -11,7 +11,6 @@ struct ApplicationSettings {
     bool checkForUpdates;
     bool showReleaseCandidates;
     float uiScale = 1.0f;
-    std::vector<std::string> ignoredDirectories;
 
     static ApplicationSettings getDefault();
 };
@@ -38,6 +37,9 @@ struct ApplicationAction {
     static constexpr u32 KillEmitters = "application/Edit/KillEmitters"_crc;
     static constexpr u32 ResetCamera = "application/Edit/ResetCamera"_crc;
 
+    // project
+    static constexpr u32 QuickOpen = "project/QuickOpen"_crc;
+
     static inline const std::map<u32, const char*> Names = {
         { NewFile, "New File" },
         { OpenProject, "Open Project" },
@@ -54,6 +56,8 @@ struct ApplicationAction {
         { PlayEmitterLooped, "Play Emitter (Looped)" },
         { PlayAllEmitters, "Play All Emitters" },
         { KillEmitters, "Kill Emitters" },
-        { ResetCamera, "Reset Camera" }
+        { ResetCamera, "Reset Camera" },
+
+        { QuickOpen, "Quick Open" }
     };
 };

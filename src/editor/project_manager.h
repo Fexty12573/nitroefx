@@ -122,7 +122,14 @@ public:
         m_unsavedEditors.clear();
     }
 
-    void openFileSearch() { m_fuzzyOpen = true; m_fuzzyQueryDirty = true; }
+    void openFileSearch() {
+        if (m_projectPath.empty()) {
+            return;
+        }
+
+        m_fuzzyOpen = true;
+        m_fuzzyQueryDirty = true;
+    }
 
 private:
     void openEditor(size_t narcIndex);
@@ -271,8 +278,8 @@ private:
     std::string m_prevFuzzyQuery;
     std::vector<size_t> m_prevCandidates;
     std::vector<size_t> m_fuzzyAlpha;
-    mutable std::mutex m_fuzzyMutex;
     std::jthread m_fuzzyIndexThread;
+    mutable std::mutex m_fuzzyMutex;
     mutable std::atomic<bool> m_fuzzyIndexDirty = false;
 
     static constexpr uint32_t INDEX_MAGIC = 0x20584449; // "IDX "

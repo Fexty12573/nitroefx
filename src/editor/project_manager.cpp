@@ -272,7 +272,8 @@ void ProjectManager::render() {
         } else {
             if (ImGui::CollapsingHeader("Settings")) {
                 ImGui::Checkbox("Hide non .spa files", &m_hideOtherFiles);
-                if (ImGui::Button("Quick Open (Ctrl+T)")) {
+                const auto quickOpenKeybind = g_application->getKeybind(ApplicationAction::QuickOpen)->toString();
+                if (ImGui::Button(fmt::format("Quick Open ({})", quickOpenKeybind).c_str())) {
                     openFileSearch();
                 }
             }
@@ -320,11 +321,6 @@ void ProjectManager::render() {
 
 void ProjectManager::handleEvent(const SDL_Event& event) {
     switch (event.type) {
-    case SDL_EVENT_KEY_DOWN: {
-        if ((event.key.mod & SDL_KMOD_CTRL) && event.key.key == SDLK_T) {
-            openFileSearch();
-        }
-    } break;
     case SDL_EVENT_DROP_FILE: {
         const fs::path path = event.drop.data;
         if (fs::is_directory(path)) {

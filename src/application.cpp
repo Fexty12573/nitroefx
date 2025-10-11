@@ -84,6 +84,7 @@ Application::Application() {
         ApplicationAction::PlayAllEmitters,
         ApplicationAction::KillEmitters,
         ApplicationAction::ResetCamera,
+        ApplicationAction::QuickOpen,
     };
 
     m_modifierKeys = {
@@ -877,9 +878,6 @@ void Application::renderPreferences() {
 
         m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
 
-        ImGui::Text("Ignored Directories (Separate with ';')");
-        ImGui::InputText("##IgnoredDirectories", &m_ignoredDirectoriesStr);
-
         ImGui::SeparatorText("Keybinds");
 
         if (ImGui::BeginTable("Keybinds##Application", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH)) {
@@ -954,11 +952,6 @@ void Application::renderPreferences() {
         if (m_uiScaleChanged) {
             ImGui::OpenPopup("Restart Required##Application");
             m_uiScaleChanged = false;
-        }
-
-        m_settings.ignoredDirectories.clear();
-        for (const auto& dir : std::views::split(m_ignoredDirectoriesStr, ';')) {
-            m_settings.ignoredDirectories.emplace_back(std::string_view(dir));
         }
     }
 }
@@ -1488,27 +1481,6 @@ void Application::loadConfig() {
     m_settings.checkForUpdates = config.value("checkForUpdates", m_settings.checkForUpdates);
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
     m_settings.uiScale = config.value("uiScale", m_settings.uiScale);
-
-    if (config.contains("ignoredDirectories") && config["ignoredDirectories"].is_array()) {
-        for (const auto& dir : config["ignoredDirectories"]) {
-            m_settings.ignoredDirectories.push_back(dir.get<std::string>());
-        }
-    } else {
-        // Fill with default ignored directories
-        m_settings.ignoredDirectories = {
-            ".git",
-            "node_modules",
-            "build",
-            "out",
-            "dist",
-            "bin",
-            "obj",
-            ".vs",
-            ".idea",
-        };
-    }
-
-    m_ignoredDirectoriesStr = fmt::format("{}", fmt::join(m_settings.ignoredDirectories, ";"));
     
     m_editor->loadConfig(config);
 }
@@ -1592,6 +1564,9 @@ void Application::executeAction(u32 action) {
         break;
     case ApplicationAction::ResetCamera:
         m_editor->resetCamera();
+        break;
+    case ApplicationAction::QuickOpen:
+        g_projectManager->openFileSearch();
         break;
     }
 }

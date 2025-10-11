@@ -150,8 +150,6 @@ private:
     std::deque<std::string> m_recentFiles;
     std::deque<std::string> m_recentProjects;
 
-    std::string m_ignoredDirectoriesStr;
-
     std::map<std::string, ImFont*> m_fonts;
 
     std::string m_iniFilename;
