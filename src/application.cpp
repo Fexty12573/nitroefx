@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #endif
 #include <tinyfiledialogs.h>
+#include "util/wsl.h"
 
 #define KEYBINDSTR(name) getKeybind(ApplicationAction::name)->toString().c_str()
 
@@ -157,7 +158,7 @@ int Application::run(int argc, char** argv) {
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 #else
     // Multi-viewport doesn't work very well under WSL
-    if (!Application::isRunningUnderWSL()) {
+    if (!WSLUtil::isRunningUnderWSL()) {
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     }
 #endif
@@ -293,6 +294,8 @@ int Application::run(int argc, char** argv) {
 
         lastFrame = now;
     }
+
+    g_projectManager->closeProject(true);
 
     if (m_updateOnClose) {
         const auto archivePath = downloadLatestArchive();
@@ -1881,6 +1884,10 @@ std::filesystem::path Application::getExecutablePath() {
 #endif
 }
 
+std::filesystem::path Application::getCachePath() {
+    return getConfigPath() / "cache";
+}
+
 std::string Application::openFile() {
     const char* filters[] = { "*.spa", "*.bin", "*. APS", "*._APS", "*.APS", "*.narc" };
     const char* result = tinyfd_openFileDialog(
@@ -2209,26 +2216,6 @@ std::optional<AppVersion> Application::findLatestVersion() {
     }
 
     return getNewestVersion(versions);
-}
-
-bool Application::isRunningUnderWSL() {
-#ifdef _WIN32
-    return false;
-#else
-    try {
-        std::ifstream osrelease("/proc/sys/kernel/osrelease");
-        if (!osrelease.is_open()) {
-            return false;
-        }
-        std::string line;
-        std::getline(osrelease, line);
-        osrelease.close();
-
-        return line.contains("microsoft") || line.contains("WSL");
-    } catch (...) {
-        return false;
-    }
-#endif
 }
 
 void Application::applyUpdateNow(const std::filesystem::path& binaryPath, bool relaunch) {

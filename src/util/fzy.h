@@ -25,7 +25,6 @@ static double score(std::string_view needle, std::string_view haystack) {
         return 0.0;
     }
 
-    // greedy forward match, record positions
     std::array<int, 512> pos{};
     if (needle.size() > pos.size()) {
         return 0.0;
@@ -42,13 +41,12 @@ static double score(std::string_view needle, std::string_view haystack) {
         return 0.0;
     }
 
-    // score matched positions
     double score = 0.0;
     for (size_t k = 0; k < needle.size(); ++k) {
         const int i = pos[k];
         const char cur = haystack[i];
         const char prev = (i > 0) ? haystack[i - 1] : '\0';
-        bool boundary = (i == 0) || prev == '/' || prev == '\\' || prev == '_' || prev == '-' || prev == ' ' || prev == '.';
+        const bool boundary = (i == 0) || prev == '/' || prev == '\\' || prev == '_' || prev == '-' || prev == ' ' || prev == '.';
         score += 1.0;
 
         if (boundary) {

@@ -15,6 +15,10 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <fstream>
 
 class Editor;
 
@@ -34,16 +38,24 @@ public:
     void saveAllEditors() const;
 
     bool hasEditor(const std::filesystem::path& path) const {
-        return std::ranges::any_of(m_openEditors, [&path](const auto& editor) { return editor->getPath() == path; });
+        return std::ranges::any_of(m_openEditors, [&path](const auto& editor) {
+            return editor->getPath() == path;
+        });
     }
 
     std::shared_ptr<EditorInstance> getEditor(const std::filesystem::path& path) const {
-        const auto it = std::ranges::find_if(m_openEditors, [&path](const auto& editor) { return editor->getPath() == path; });
+        const auto it = std::ranges::find_if(m_openEditors, [&path](const auto& editor) {
+            return editor->getPath() == path;
+        });
+
         return it != m_openEditors.end() ? *it : nullptr;
     }
 
     std::shared_ptr<EditorInstance> getEditor(u64 uniqueID) const {
-        const auto it = std::ranges::find_if(m_openEditors, [uniqueID](const auto& editor) { return editor->getUniqueID() == uniqueID; });
+        const auto it = std::ranges::find_if(m_openEditors, [uniqueID](const auto& editor) {
+            return editor->getUniqueID() == uniqueID;
+        });
+
         return it != m_openEditors.end() ? *it : nullptr;
     }
 
@@ -162,10 +174,13 @@ private:
     void fuzzyAddPath(const std::filesystem::path& p);
     void fuzzyRemovePath(const std::filesystem::path& p);
     void fuzzyMovePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
+    void startFuzzyIndexingAsync();
+    bool loadFuzzyIndex();
+    void saveFuzzyIndex() const;
 
     class FileWatchListener : public efsw::FileWatchListener {
     public:
-        FileWatchListener(ProjectManager* projManager) : m_projManager(projManager) {}
+        explicit FileWatchListener(ProjectManager* projManager) : m_projManager(projManager) {}
 
         void handleFileAction(efsw::WatchID watchId, const std::string& dir,
             const std::string& filename, efsw::Action action, std::string oldFilename) override {
@@ -247,7 +262,8 @@ private:
     // Fuzzy finding
     std::vector<FuzzyFileEntry> m_fuzzyFiles;
     std::unordered_map<std::string, size_t> m_fuzzyIndex;
-    bool m_fuzzyIndexBuilt = false;
+    std::atomic<bool> m_fuzzyIndexBuilt = false;
+    std::atomic<bool> m_fuzzyIndexBuilding = false;
     bool m_fuzzyOpen = false;
     bool m_fuzzyQueryDirty = false;
     char m_fuzzyQuery[256] = { 0 };
@@ -255,6 +271,24 @@ private:
     std::string m_prevFuzzyQuery;
     std::vector<size_t> m_prevCandidates;
     std::vector<size_t> m_fuzzyAlpha;
+    mutable std::mutex m_fuzzyMutex;
+    std::jthread m_fuzzyIndexThread;
+    mutable std::atomic<bool> m_fuzzyIndexDirty = false;
+
+    static constexpr uint32_t INDEX_MAGIC = 0x20584449; // "IDX "
+    static constexpr uint32_t INDEX_VERSION = 1;
+
+    struct IndexHeader {
+        uint32_t magic;
+        uint32_t version;
+        uint64_t timestamp;
+        uint64_t fileCount;
+    };
+    struct IndexEntry {
+        uint16_t relLen;
+        uint16_t filenameLen;
+        // Followed by relative path and filename
+    };
 
     static inline const std::unordered_set<std::string> s_spaExtensions = {
         ".spa",

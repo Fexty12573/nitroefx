@@ -23,7 +23,6 @@ find_package(CURL CONFIG REQUIRED)
 find_package(minizip-ng CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(efsw CONFIG REQUIRED)
-find_package(rapidfuzz CONFIG REQUIRED)
 add_subdirectory(external/narc)
 add_subdirectory(external/embed)
 
@@ -89,11 +88,10 @@ target_link_libraries(nitroefx PRIVATE
     ZLIB::ZLIB
     MINIZIP::minizip-ng
     efsw::efsw
-    rapidfuzz::rapidfuzz
     ${IMAGEQUANT_LIB})
 
 if (WIN32)
-    target_link_libraries(nitroefx PRIVATE Ws2_32.lib ntdll.lib userenv.lib)
+    target_link_libraries(nitroefx PRIVATE Ws2_32.lib ntdll.lib userenv.lib Mpr.lib)
     target_compile_options(nitroefx PRIVATE /wd4312)
     target_sources(nitroefx PRIVATE data/icon.rc)
     target_compile_definitions(nitroefx PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
