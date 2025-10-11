@@ -20,6 +20,7 @@
     "curl",
     "zlib",
     "minizip-ng",
-    "efsw"
+    "efsw",
+    "rapidfuzz"
   ]
 }
