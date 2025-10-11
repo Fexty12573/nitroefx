@@ -2,20 +2,19 @@
 #include "gfx/gl_util.h"
 #include "enum_names.h"
 
-#include <GL/glew.h>
-#include <glm/gtc/constants.hpp>
 #include <spdlog/spdlog.h>
+#include <fmt/printf.h>
 #include <stb_image_write.h>
 #include <spng.h>
 #include <fstream>
-#include <concepts>
 #include <ranges>
 #include <span>
 #include <spanstream>
-#include <print>
 
 #include "spl_random.h"
 
+
+namespace {
 
 template<class T> requires std::is_trivially_copyable_v<T>
 std::istream& operator>>(std::istream& stream, T& v) {
@@ -26,8 +25,6 @@ template<class T> requires std::is_trivially_copyable_v<T>
 std::ostream& operator<<(std::ostream& stream, const T& v) {
     return stream.write(reinterpret_cast<const char*>(&v), sizeof(T));
 }
-
-namespace {
 
 #define ROW(i0, i1, i2, i3, i4, i5, i6, i7) (((i3 << 6) | (i2 << 4) | (i1 << 2) | (i0))), (((i7 << 6) | (i6 << 4) | (i5 << 2) | (i4)))
 
@@ -97,8 +94,8 @@ SPLArchive::SPLArchive(bool createGpuTextures) {
     defaultTexture.width = 8;
     defaultTexture.height = 8;
 
-    defaultTexture.textureData = std::span<const u8>(DEFAULT_TEXTURE.data(), DEFAULT_TEXTURE.size());
-    defaultTexture.paletteData = std::span<const u8>((u8*)DEFAULT_PALETTE.data(), DEFAULT_PALETTE.size() * sizeof(GXRgba));
+    defaultTexture.textureData = std::span(DEFAULT_TEXTURE.data(), DEFAULT_TEXTURE.size());
+    defaultTexture.paletteData = std::span(( const u8*)DEFAULT_PALETTE.data(), DEFAULT_PALETTE.size() * sizeof(GXRgba));
 
     if (createGpuTextures) {
         defaultTexture.glTexture = std::make_shared<GLTexture>(defaultTexture);
@@ -506,24 +503,24 @@ void SPLArchive::deleteTexture(size_t index) {
 }
 
 void SPLArchive::printInfo(std::string_view name) const {
-    std::println("Archive Info for {}", name);
-    std::println("Resources: {}", m_resources.size());
-    std::println("Textures: {}", m_textures.size());
-    std::println();
+    fmt::println("Archive Info for {}", name);
+    fmt::println("Resources: {}", m_resources.size());
+    fmt::println("Textures: {}", m_textures.size());
+    fmt::println("");
 
     using namespace detail;
     for (const auto [i, tex] : std::views::enumerate(m_textures)) {
-        std::println("Texture {}:", i);
-        std::println("  Size: {}x{}", tex.width, tex.height);
-        std::println("  Format: {}", getTextureFormat(tex.param.format));
-        std::println("  Repeat: {}", getTextureRepeat(tex.param.repeat));
-        std::println("  Flip: {}", getTextureFlip(tex.param.flip));
-        std::println("  Palette color 0 transparent: {}", tex.param.palColor0Transparent ? "Yes" : "No");
-        std::println("  Uses shared texture: {}", tex.param.useSharedTexture ? "Yes" : "No");
+        fmt::println("Texture {}:", i);
+        fmt::println("  Size: {}x{}", tex.width, tex.height);
+        fmt::println("  Format: {}", getTextureFormat(tex.param.format));
+        fmt::println("  Repeat: {}", getTextureRepeat(tex.param.repeat));
+        fmt::println("  Flip: {}", getTextureFlip(tex.param.flip));
+        fmt::println("  Palette color 0 transparent: {}", tex.param.palColor0Transparent ? "Yes" : "No");
+        fmt::println("  Uses shared texture: {}", tex.param.useSharedTexture ? "Yes" : "No");
         if (tex.param.useSharedTexture) {
-            std::println("  Shared texture ID: {}", tex.param.sharedTexID);
+            fmt::println("  Shared texture ID: {}", tex.param.sharedTexID);
         }
-        std::println();
+        fmt::println("");
     }
 }
 

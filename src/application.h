@@ -49,7 +49,7 @@ public:
     Application();
 
     int run(int argc, char** argv);
-    int runCli(argparse::ArgumentParser& cli);
+    int runCli(argparse::ArgumentParser& parser);
 
     void saveConfig();
     ImFont* getFont(const std::string& name);
@@ -161,10 +161,10 @@ private:
 
     ApplicationSettings m_settings;
     std::vector<u32> m_sortedActions;
-    int m_preferencesWindowId = 0;
-    int m_aboutWindowId = 0;
-    int m_updateWindowId = 0;
-    int m_welcomeWindowId = 0;
+    ImGuiID m_preferencesWindowId = 0;
+    ImGuiID m_aboutWindowId = 0;
+    ImGuiID m_updateWindowId = 0;
+    ImGuiID m_welcomeWindowId = 0;
     bool m_preferencesOpen = false;
     bool m_aboutWindowOpen = false;
     bool m_listeningForInput = false;

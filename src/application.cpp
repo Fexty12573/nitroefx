@@ -308,7 +308,7 @@ int Application::run(int argc, char** argv) {
     return 0;
 }
 
-int Application::runCli(argparse::ArgumentParser &parser) {
+int Application::runCli(argparse::ArgumentParser& parser) {
     if (parser.is_subcommand_used("export")) {
         const auto& cmd = parser.at<argparse::ArgumentParser>("export");
         const auto output = cmd.get<std::string>("--output");

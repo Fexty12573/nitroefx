@@ -30,7 +30,7 @@ public:
     void closeEditor(const std::shared_ptr<EditorInstance>& editor, bool force = false);
     void closeTempEditor();
     void closeAllEditors();
-    void saveAllEditors();
+    void saveAllEditors() const;
 
     bool hasEditor(const std::filesystem::path& path) const {
         return std::ranges::any_of(m_openEditors, [&path](const auto& editor) { return editor->getPath() == path; });
@@ -213,7 +213,7 @@ private:
     InlineEditMode m_inlineMode = InlineEditMode::None;
     std::filesystem::path m_inlineEditPathOld;
     std::filesystem::path m_inlineEditTargetDir;
-    char m_inlineEditBuffer[256] = { 0 };
+    char m_inlineEditBuffer[256] = {};
     bool m_inlineEditFocusRequested = false;
 
     static inline const std::unordered_set<std::string> s_spaExtensions = {

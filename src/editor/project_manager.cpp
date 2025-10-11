@@ -36,8 +36,7 @@ void ProjectManager::openProject(const std::filesystem::path& path) {
         };
 
         int button = 0;
-        const auto result = SDL_ShowMessageBox(&data, &button);
-        if (!result || button == 0) {
+        if (!SDL_ShowMessageBox(&data, &button) || button == 0) {
             return;
         }
 
@@ -176,7 +175,7 @@ void ProjectManager::closeAllEditors() {
     }
 }
 
-void ProjectManager::saveAllEditors() {
+void ProjectManager::saveAllEditors() const {
     for (const auto& editor : m_openEditors) {
         editor->save();
     }
@@ -213,19 +212,18 @@ void ProjectManager::render() {
                 }
             } else {
                 ensureDirectoryCached(m_projectPath);
-                auto& entries = m_directoryCache[m_projectPath];
-                for (const auto& entry : entries) {
-                    if (!m_searchString.empty() && !entry.isDirectory) {
-                        const auto name = entry.path.filename().string();
+                for (const auto& [path, isDirectory] : m_directoryCache[m_projectPath]) {
+                    if (!m_searchString.empty() && !isDirectory) {
+                        const auto name = path.filename().string();
                         if (!name.contains(m_searchString)) {
                             continue;
                         }
                     }
 
-                    if (entry.isDirectory) {
-                        renderDirectory(entry.path);
+                    if (isDirectory) {
+                        renderDirectory(path);
                     } else {
-                        renderFile(entry.path);
+                        renderFile(path);
                     }
                 }
             }
