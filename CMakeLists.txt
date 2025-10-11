@@ -23,6 +23,7 @@ find_package(CURL CONFIG REQUIRED)
 find_package(minizip-ng CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(efsw CONFIG REQUIRED)
+find_package(rapidfuzz CONFIG REQUIRED)
 add_subdirectory(external/narc)
 add_subdirectory(external/embed)
 
@@ -88,6 +89,7 @@ target_link_libraries(nitroefx PRIVATE
     ZLIB::ZLIB
     MINIZIP::minizip-ng
     efsw::efsw
+    rapidfuzz::rapidfuzz
     ${IMAGEQUANT_LIB})
 
 if (WIN32)

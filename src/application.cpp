@@ -7,10 +7,12 @@
 #include <SDL3/SDL.h>
 #include <GL/glew.h>
 #include <fmt/compile.h>
+#include <fmt/ranges.h>
 #include <SDL3/SDL_opengl.h>
 #include <imgui.h>
 #include <implot.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
@@ -872,6 +874,9 @@ void Application::renderPreferences() {
 
         m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
 
+        ImGui::Text("Ignored Directories (Separate with ';')");
+        ImGui::InputText("##IgnoredDirectories", &m_ignoredDirectoriesStr);
+
         ImGui::SeparatorText("Keybinds");
 
         if (ImGui::BeginTable("Keybinds##Application", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH)) {
@@ -946,6 +951,11 @@ void Application::renderPreferences() {
         if (m_uiScaleChanged) {
             ImGui::OpenPopup("Restart Required##Application");
             m_uiScaleChanged = false;
+        }
+
+        m_settings.ignoredDirectories.clear();
+        for (const auto& dir : std::views::split(m_ignoredDirectoriesStr, ';')) {
+            m_settings.ignoredDirectories.emplace_back(std::string_view(dir));
         }
     }
 }
@@ -1476,6 +1486,27 @@ void Application::loadConfig() {
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
     m_settings.uiScale = config.value("uiScale", m_settings.uiScale);
 
+    if (config.contains("ignoredDirectories") && config["ignoredDirectories"].is_array()) {
+        for (const auto& dir : config["ignoredDirectories"]) {
+            m_settings.ignoredDirectories.push_back(dir.get<std::string>());
+        }
+    } else {
+        // Fill with default ignored directories
+        m_settings.ignoredDirectories = {
+            ".git",
+            "node_modules",
+            "build",
+            "out",
+            "dist",
+            "bin",
+            "obj",
+            ".vs",
+            ".idea",
+        };
+    }
+
+    m_ignoredDirectoriesStr = fmt::format("{}", fmt::join(m_settings.ignoredDirectories, ";"));
+    
     m_editor->loadConfig(config);
 }
 
