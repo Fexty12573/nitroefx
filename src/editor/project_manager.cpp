@@ -1039,7 +1039,7 @@ void ProjectManager::renderFuzzyFinder() {
             ImGui::SetKeyboardFocusHere();
         }
 
-        if (ImGui::InputTextWithHint("##fuzzyQuery", "Type to search...", m_fuzzyQuery, IM_ARRAYSIZE(m_fuzzyQuery))) {
+        if (ImGui::InputTextWithHint("##fuzzyQuery", "Type to search...", m_fuzzyQuery, IM_ARRAYSIZE(m_fuzzyQuery), ImGuiInputTextFlags_AutoSelectAll)) {
             m_fuzzyQueryDirty = true;
         }
 
@@ -1071,7 +1071,7 @@ void ProjectManager::renderFuzzyFinder() {
 
         std::vector<Row> rows;
         {
-            std::scoped_lock lk(m_fuzzyMutex);
+            std::lock_guard<std::mutex> lock(m_fuzzyMutex);
             rows.reserve(m_fuzzyResults.size());
             for (const auto& r : m_fuzzyResults) {
                 if (r.index >= m_fuzzyFiles.size()) {
