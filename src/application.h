@@ -136,6 +136,11 @@ private:
     bool extractTarGz(const std::filesystem::path& archivePath, const std::string& wantedName, const std::filesystem::path& outPath);
     bool gunzipFile(const std::filesystem::path& srcPath, std::vector<u8>& dst);
 
+    // Idle heuristics
+    bool hasActiveEmitters() const;
+    bool isWindowMinimizedOrHidden() const;
+    bool isWindowFocused() const;
+
 private:
     bool m_running = true;
     SDL_Window* m_window = nullptr;
@@ -179,6 +184,8 @@ private:
 
     std::string m_downloadedArchivePath;
     std::string m_extractedBinaryPath;
+
+    float m_idleAccumulator = 0.0f; // accumulate time to occasionally update particles while unfocused
 };
 
 inline Application* g_application = nullptr;

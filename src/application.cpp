@@ -47,7 +47,7 @@ static void debugCallback(GLenum source, GLenum type, GLuint id, GLenum severity
         spdlog::warn("OpenGL Error: {}", message);
         break;
     case GL_DEBUG_SEVERITY_LOW:
-        spdlog::info("OpenGL Warn: {}", message);
+        spdlog::info("OpenGL Error: {}", message);
         break;
     case GL_DEBUG_SEVERITY_NOTIFICATION:
         spdlog::debug("OpenGL Info: {}", message);
@@ -117,7 +117,11 @@ int Application::run(int argc, char** argv) {
 
     m_context = SDL_GL_CreateContext(m_window);
     SDL_GL_MakeCurrent(m_window, m_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+
+    if (!SDL_GL_SetSwapInterval(-1)) { // Try to enable adaptive vsync
+        spdlog::warn("Adaptive vsync not supported, falling back to standard vsync");
+        SDL_GL_SetSwapInterval(1); // Enable vsync
+    }
 
     glewExperimental = GL_TRUE;
     const GLenum glewError = glewInit();
@@ -128,8 +132,13 @@ int Application::run(int argc, char** argv) {
 
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
+
+#ifdef _DEBUG
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(debugCallback, nullptr);
+#else
+    glDisable(GL_DEBUG_OUTPUT);
+#endif
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthFunc(GL_LESS);
@@ -178,12 +187,22 @@ int Application::run(int argc, char** argv) {
     m_updateWindowId = ImHashStr("Update##Application");
     m_welcomeWindowId = ImHashStr("Welcome##Application");
 
-    std::chrono::time_point<std::chrono::high_resolution_clock> lastFrame = std::chrono::high_resolution_clock::now();
+
+    using clock = std::chrono::high_resolution_clock;
+    auto lastFrame = clock::now();
 
     while (m_running) {
-        const auto now = std::chrono::high_resolution_clock::now();
-        const auto delta = std::chrono::duration<float>(now - lastFrame).count();
+        auto now = clock::now();
+        auto delta = std::chrono::duration<float>(now - lastFrame).count();
         m_deltaTime = delta;
+
+        const bool minimized = isWindowMinimizedOrHidden();
+        const bool focused = isWindowFocused();
+        const bool activeEmitters = hasActiveEmitters();
+
+        bool idle = false;
+        if (minimized) idle = true;
+        else if (!focused && !activeEmitters) idle = true;
 
         pollEvents();
 
@@ -192,68 +211,84 @@ int Application::run(int argc, char** argv) {
             m_reloadFonts = false;
         }
 
-        m_editor->updateParticles(delta);
-        m_editor->renderParticles();
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-
-        // Build default docking layout once if no ini file exists
-        if (!m_layoutInitialized) {
-            initDefaultDockingLayout();
-            checkArgs(argc, argv);
+        if (!idle || activeEmitters) {
+            m_editor->updateParticles(delta);
+        } else if (idle && !activeEmitters) {
+            m_idleAccumulator += delta;
+            if (m_idleAccumulator > 0.5f) {
+                m_editor->updateParticles(m_idleAccumulator);
+                m_idleAccumulator = 0.0f;
+            }
         }
 
-        ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"));
+        if (!minimized) {
+            m_editor->renderParticles();
 
-        renderMenuBar();
-        g_projectManager->render();
-        m_editor->render();
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
 
-        if (m_preferencesOpen) {
-            const auto center = ImGui::GetMainViewport()->GetCenter();
-            ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
+            // Build default docking layout once if no ini file exists
+            if (!m_layoutInitialized) {
+                initDefaultDockingLayout();
+                checkArgs(argc, argv);
+            }
 
-            renderPreferences();
+            ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"));
+
+            renderMenuBar();
+            g_projectManager->render();
+            m_editor->render();
+
+            if (m_preferencesOpen) {
+                const auto center = ImGui::GetMainViewport()->GetCenter();
+                ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
+
+                renderPreferences();
+            }
+
+            if (m_performanceWindowOpen) {
+                renderPerformanceWindow();
+            }
+
+            if (m_aboutWindowOpen) {
+                renderAboutWindow();
+            }
+
+            if (m_firstFrame) {
+                ImGui::PushOverrideID(m_welcomeWindowId);
+                ImGui::OpenPopup("Welcome to NitroEFX");
+                ImGui::PopID();
+                m_firstFrame = false;
+            }
+
+            renderWelcomeWindow();
+
+            renderUpdateWindow();
+
+            renderRestartPopup();
+
+            ImGui::Render();
+            glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+            glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                SDL_Window* currentWindow = SDL_GL_GetCurrentWindow();
+                SDL_GLContext currentContext = SDL_GL_GetCurrentContext();
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+                SDL_GL_MakeCurrent(currentWindow, currentContext);
+            }
+
+            SDL_GL_SwapWindow(m_window);
+        } else {
+            // When minimized, small sleep to avoid busy loop
+            // and skip all rendering
+            SDL_Delay(10);
         }
 
-        if (m_performanceWindowOpen) {
-            renderPerformanceWindow();
-        }
-
-        if (m_aboutWindowOpen) {
-            renderAboutWindow();
-        }
-
-        if (m_firstFrame) {
-            ImGui::PushOverrideID(m_welcomeWindowId);
-            ImGui::OpenPopup("Welcome to NitroEFX");
-            ImGui::PopID();
-            m_firstFrame = false;
-        }
-
-        renderWelcomeWindow();
-
-        renderUpdateWindow();
-
-        renderRestartPopup();
-
-        ImGui::Render();
-        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-        glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            SDL_Window* currentWindow = SDL_GL_GetCurrentWindow();
-            SDL_GLContext currentContext = SDL_GL_GetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            SDL_GL_MakeCurrent(currentWindow, currentContext);
-        }
-
-        SDL_GL_SwapWindow(m_window);
         lastFrame = now;
     }
 
@@ -2487,4 +2522,25 @@ bool Application::gunzipFile(const std::filesystem::path& srcPath, std::vector<u
 
     gzclose(f);
     return r >= 0;
+}
+
+bool Application::hasActiveEmitters() const {
+    if (!g_projectManager) return false;
+    if (!g_projectManager->hasActiveEditor()) return false;
+    const auto editor = g_projectManager->getActiveEditor();
+    if (!editor) return false;
+    // If any emitters exist we treat as active animation
+    return !editor->getParticleSystem().getEmitters().empty();
+}
+
+bool Application::isWindowMinimizedOrHidden() const {
+    if (!m_window) return false;
+    const auto flags = SDL_GetWindowFlags(m_window);
+    return (flags & SDL_WINDOW_MINIMIZED) || (flags & SDL_WINDOW_HIDDEN);
+}
+
+bool Application::isWindowFocused() const {
+    if (!m_window) return false;
+    const auto flags = SDL_GetWindowFlags(m_window);
+    return (flags & SDL_WINDOW_INPUT_FOCUS) != 0;
 }
