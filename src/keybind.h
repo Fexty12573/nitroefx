@@ -28,11 +28,21 @@ struct Keybind {
 
     [[nodiscard]] std::string toString() const {
         if (type == KeybindType::Key) {
-            return fmt::format("{}{}", getModifierName(modifiers), SDL_GetKeyName(key));
+            return fmt::format("{}{}", getModifierName(normalizeModifiers(modifiers)), SDL_GetKeyName(key));
         }
         else {
             return fmt::format("Mouse{}", button);
         }
+    }
+
+    // Collapse left/right variants (L* / R*) into aggregate SDL_KMOD_* flags
+    static SDL_Keymod normalizeModifiers(SDL_Keymod mod) {
+        SDL_Keymod norm = SDL_KMOD_NONE;
+        if (mod & SDL_KMOD_CTRL) norm = static_cast<SDL_Keymod>(norm | SDL_KMOD_CTRL);
+        if (mod & SDL_KMOD_SHIFT) norm = static_cast<SDL_Keymod>(norm | SDL_KMOD_SHIFT);
+        if (mod & SDL_KMOD_ALT) norm = static_cast<SDL_Keymod>(norm | SDL_KMOD_ALT);
+        if (mod & SDL_KMOD_GUI) norm = static_cast<SDL_Keymod>(norm | SDL_KMOD_GUI);
+        return norm;
     }
 
 private:

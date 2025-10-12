@@ -434,116 +434,54 @@ void Application::handleKeydown(const SDL_Event& event) {
 
         m_listeningKeybind->type = KeybindType::Key;
         m_listeningKeybind->key = event.key.key;
-        m_listeningKeybind->modifiers = event.key.mod;
+        m_listeningKeybind->modifiers = Keybind::normalizeModifiers(event.key.mod);
         m_listeningForInput = false;
         m_listeningKeybind = nullptr;
         m_exitKeybindListening = true;
         return;
     }
 
+    const SDL_Keycode evKey = event.key.key;
+    const SDL_Keymod evMod = Keybind::normalizeModifiers(event.key.mod);
+
+    // Exact match
     for (const auto& [action, keybind] : m_settings.keybinds) {
-        if (keybind.type == KeybindType::Key) {
-            if (event.key.key == keybind.key && event.key.mod == keybind.modifiers) {
-                executeAction(action);
-                return;
+        if (keybind.type != KeybindType::Key) continue;
+        const SDL_Keymod kbMod = Keybind::normalizeModifiers(keybind.modifiers);
+        if (evKey == keybind.key && evMod == kbMod) {
+            return executeAction(action);
+        }
+    }
+
+    const auto bitCount = [](SDL_Keymod m) {
+        int c = 0;
+        if (m & SDL_KMOD_CTRL) ++c;
+        if (m & SDL_KMOD_SHIFT) ++c;
+        if (m & SDL_KMOD_ALT) ++c;
+        if (m & SDL_KMOD_GUI) ++c;
+        return c;
+    };
+
+    // Stupid heuristic for best match because I couldn't figure out a better way
+    u32 bestAction = 0;
+    int bestScore = -1;
+    for (const auto& [action, keybind] : m_settings.keybinds) {
+        if (keybind.type != KeybindType::Key || evKey != keybind.key) {
+            continue;
+        }
+
+        const SDL_Keymod kbMod = Keybind::normalizeModifiers(keybind.modifiers);
+        if ((evMod & kbMod) == kbMod) {
+            const int score = bitCount(kbMod);
+            if (score > bestScore) {
+                bestScore = score;
+                bestAction = action;
             }
         }
     }
-    
-    switch (event.key.key) {
-    case SDLK_N:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            if (event.key.mod & SDL_KMOD_SHIFT) {
-                spdlog::warn("New Project not implemented");
-            } else {
-                g_projectManager->openEditor();
-            }
-        }
-        break;
 
-    case SDLK_O:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            if (event.key.mod & SDL_KMOD_SHIFT) {
-                const auto path = openDirectory();
-                if (!path.empty()) {
-                    g_projectManager->openProject(path);
-                }
-            } else {
-                const auto path = openFile();
-                if (!path.empty()) {
-                    g_projectManager->openEditor(path);
-                }
-            }
-        }
-        
-        break;
-
-    case SDLK_S:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            if (event.key.mod & SDL_KMOD_SHIFT) {
-                g_projectManager->saveAllEditors();
-            } else {
-                m_editor->save();
-            }
-        }
-        break;
-
-    case SDLK_W:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            if (event.key.mod & SDL_KMOD_SHIFT) {
-                if (g_projectManager->hasOpenEditors()) {
-                    g_projectManager->closeAllEditors();
-                }
-            } else {
-                if (g_projectManager->hasActiveEditor()) {
-                    g_projectManager->closeEditor(g_projectManager->getActiveEditor());
-                }
-            }
-        }
-        break;
-
-    case SDLK_P:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            if (event.key.mod & SDL_KMOD_SHIFT) {
-                m_editor->playEmitter(EmitterSpawnType::Looped);
-            } else {
-                m_editor->playEmitter(EmitterSpawnType::SingleShot);
-            }
-        }
-        break;
-
-    case SDLK_K:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            m_editor->killEmitters();
-        }
-        break;
-    
-    case SDLK_R:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            m_editor->resetCamera();
-        }
-        break;
-
-    case SDLK_Z:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            m_editor->undo();
-        }
-        break;
-
-    case SDLK_Y:
-        if (event.key.mod & SDL_KMOD_CTRL) {
-            m_editor->redo();
-        }
-        break;
-
-    case SDLK_F4:
-        if (event.key.mod & SDL_KMOD_ALT) {
-            m_running = false;
-        }
-        break;
-
-    default:
-        break;
+    if (bestScore >= 0) {
+        return executeAction(bestAction);
     }
 }
 
@@ -1566,6 +1504,16 @@ void Application::executeAction(u32 action) {
             g_projectManager->closeAllEditors();
         }
         break;
+    case ApplicationAction::Undo:
+        if (g_projectManager->hasActiveEditor()) {
+            g_projectManager->getActiveEditor()->undo();
+        }
+        break;
+    case ApplicationAction::Redo:
+        if (g_projectManager->hasActiveEditor()) {
+            g_projectManager->getActiveEditor()->redo();
+        }
+        break;
     case ApplicationAction::Exit:
         m_running = false;
         break;
@@ -1586,6 +1534,9 @@ void Application::executeAction(u32 action) {
         break;
     case ApplicationAction::QuickOpen:
         g_projectManager->openFileSearch();
+        break;
+    default:
+        spdlog::warn("Unhandled action: {}", action);
         break;
     }
 }
@@ -1970,7 +1921,7 @@ std::string Application::openDirectory(const char* title) {
 void Application::initDefaultDockingLayout() {
     if (m_layoutInitialized) return;
 
-    // If an ini file already exists, don't override user's layout
+    // If an ini file exists, we don't override the user's layout
     const char* ini_filename = ImGui::GetIO().IniFilename;
     if (ini_filename && std::filesystem::exists(ini_filename)) {
         m_layoutInitialized = true;
