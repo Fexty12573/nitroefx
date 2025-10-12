@@ -31,7 +31,8 @@
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
                 "CMAKE_BUILD_TYPE": "Release",
-                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+                "B_PRODUCTION_MODE": "ON"
             }
         },
         {
@@ -64,7 +65,8 @@
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
                 "CMAKE_BUILD_TYPE": "Release",
-                "VCPKG_TARGET_TRIPLET": "x64-linux"
+                "VCPKG_TARGET_TRIPLET": "x64-linux",
+                "B_PRODUCTION_MODE": "ON"
             }
         }
     ]

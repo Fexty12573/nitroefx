@@ -34,7 +34,9 @@ static char toLowerAscii(char c) {
     return (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
 }
 static std::string toLowerAscii(std::string_view sv) {
-    return std::ranges::to<std::string>(std::views::transform(sv, [](char c) { return toLowerAscii(c); }));
+    std::string s(sv.size(), '\0');
+    std::ranges::transform(sv, s.begin(), [](char c) { return toLowerAscii(c); });
+    return s;
 }
 
 static uint64_t maskChar(char c) {
@@ -300,10 +302,10 @@ void ProjectManager::render() {
                         }
                     }
 
-                    if (isDirectory) {
-                        renderDirectory(path);
+                    if (entry.isDirectory) {
+                        renderDirectory(entry.path);
                     } else {
-                        renderFile(path);
+                        renderFile(entry.path);
                     }
                 }
             }
@@ -718,9 +720,6 @@ void ProjectManager::rebuildFuzzyIndex() {
 #ifdef _WIN32
     const auto mapping = WSLUtil::detectMapping(m_projectPath);
     if (mapping) {
-#else
-    if constexpr (false) {
-#endif
         // Use WSL enumeration using 'find' command because directory iterators
         // are really slow on WSL paths when accessed from Windows.
         std::vector<std::pair<fs::path, std::string>> files;
@@ -749,6 +748,7 @@ void ProjectManager::rebuildFuzzyIndex() {
             }
         }
     } else {
+#endif
         // Normal filesystem traversal
         std::error_code ec;
         for (const auto& it : fs::recursive_directory_iterator(m_projectPath)) {
@@ -777,7 +777,9 @@ void ProjectManager::rebuildFuzzyIndex() {
             newIndex[rel] = newFiles.size();
             newFiles.push_back(std::move(e));
         }
+#ifdef _WIN32
     }
+#endif
 
     {
         std::scoped_lock lock(m_fuzzyMutex);
