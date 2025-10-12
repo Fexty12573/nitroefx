@@ -14,6 +14,11 @@
 #include <ranges>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <fstream>
 
 class Editor;
 
@@ -33,16 +38,24 @@ public:
     void saveAllEditors() const;
 
     bool hasEditor(const std::filesystem::path& path) const {
-        return std::ranges::any_of(m_openEditors, [&path](const auto& editor) { return editor->getPath() == path; });
+        return std::ranges::any_of(m_openEditors, [&path](const auto& editor) {
+            return editor->getPath() == path;
+        });
     }
 
     std::shared_ptr<EditorInstance> getEditor(const std::filesystem::path& path) const {
-        const auto it = std::ranges::find_if(m_openEditors, [&path](const auto& editor) { return editor->getPath() == path; });
+        const auto it = std::ranges::find_if(m_openEditors, [&path](const auto& editor) {
+            return editor->getPath() == path;
+        });
+
         return it != m_openEditors.end() ? *it : nullptr;
     }
 
     std::shared_ptr<EditorInstance> getEditor(u64 uniqueID) const {
-        const auto it = std::ranges::find_if(m_openEditors, [uniqueID](const auto& editor) { return editor->getUniqueID() == uniqueID; });
+        const auto it = std::ranges::find_if(m_openEditors, [uniqueID](const auto& editor) {
+            return editor->getUniqueID() == uniqueID;
+        });
+
         return it != m_openEditors.end() ? *it : nullptr;
     }
 
@@ -109,6 +122,15 @@ public:
         m_unsavedEditors.clear();
     }
 
+    void openFileSearch() {
+        if (m_projectPath.empty()) {
+            return;
+        }
+
+        m_fuzzyOpen = true;
+        m_fuzzyQueryDirty = true;
+    }
+
 private:
     void openEditor(size_t narcIndex);
     void openTempEditor(size_t narcIndex);
@@ -125,9 +147,10 @@ private:
         CreateFile
     };
 
-    // ---------------- Directory Cache -----------------
     struct CachedEntry {
         std::filesystem::path path;
+        std::string name;
+        std::string nameLower;
         bool isDirectory;
     };
 
@@ -151,13 +174,26 @@ private:
     void onFileModified(const std::filesystem::path& file);
     void onFileMoved(const std::filesystem::path& parentDir, const std::string& oldName, const std::string& newName);
 
+    // Fuzzy finding
+    void rebuildFuzzyIndex();
+    void updateFuzzyResults();
+    void renderFuzzyFinder();
+    void fuzzyAddPath(const std::filesystem::path& p);
+    void fuzzyRemovePath(const std::filesystem::path& p);
+    void fuzzyMovePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
+    void startFuzzyIndexingAsync();
+    bool loadFuzzyIndex();
+    void saveFuzzyIndex() const;
+
     class FileWatchListener : public efsw::FileWatchListener {
     public:
-        FileWatchListener(ProjectManager* projManager) : m_projManager(projManager) {}
+        explicit FileWatchListener(ProjectManager* projManager) : m_projManager(projManager) {}
 
         void handleFileAction(efsw::WatchID watchId, const std::string& dir,
             const std::string& filename, efsw::Action action, std::string oldFilename) override {
-            if (!m_projManager) return;
+            if (!m_projManager) {
+                return;
+            }
             const std::filesystem::path parentDir(dir);
             switch (action) {
             case efsw::Action::Add:
@@ -179,19 +215,33 @@ private:
         ProjectManager* m_projManager;
     };
 
+    struct FuzzyFileEntry {
+        std::filesystem::path fullPath;
+        std::string relative;
+        std::string filename;
+        std::string relativeLower;
+        std::string filenameLower;
+        uint64_t charMask = 0;
+    };
+
+    struct FuzzyResult {
+        size_t index;
+        double score;
+    };
+
     friend class FileWatchListener;
 
 private:
     Editor* m_mainEditor;
     std::filesystem::path m_projectPath;
-    bool m_isNarc;
-    narc* m_narc;
+    bool m_isNarc = false;
+    narc* m_narc = nullptr;
     vfs_ctx m_vfsCtx;
-    fatb_meta* m_fatbMeta;
-    fatb_entry* m_fatb;
-    char* m_fimg;
+    fatb_meta* m_fatbMeta = nullptr;
+    fatb_entry* m_fatb = nullptr;
+    char* m_fimg = nullptr;
 
-    // Directory cache
+    // Recursive directory cache
     std::unique_ptr<efsw::FileWatcher> m_watcher;
     std::unique_ptr<FileWatchListener> m_listener;
     std::unordered_map<std::filesystem::path, std::vector<CachedEntry>, PathHash> m_directoryCache;
@@ -216,6 +266,37 @@ private:
     char m_inlineEditBuffer[256] = {};
     bool m_inlineEditFocusRequested = false;
 
+    // Fuzzy finding
+    std::vector<FuzzyFileEntry> m_fuzzyFiles;
+    std::unordered_map<std::string, size_t> m_fuzzyIndex;
+    std::atomic<bool> m_fuzzyIndexBuilt = false;
+    std::atomic<bool> m_fuzzyIndexBuilding = false;
+    bool m_fuzzyOpen = false;
+    bool m_fuzzyQueryDirty = false;
+    char m_fuzzyQuery[256] = { 0 };
+    std::vector<FuzzyResult> m_fuzzyResults;
+    std::string m_prevFuzzyQuery;
+    std::vector<size_t> m_prevCandidates;
+    std::vector<size_t> m_fuzzyAlpha;
+    std::jthread m_fuzzyIndexThread;
+    mutable std::mutex m_fuzzyMutex;
+    mutable std::atomic<bool> m_fuzzyIndexDirty = false;
+
+    static constexpr uint32_t INDEX_MAGIC = 0x20584449; // "IDX "
+    static constexpr uint32_t INDEX_VERSION = 1;
+
+    struct IndexHeader {
+        uint32_t magic;
+        uint32_t version;
+        uint64_t timestamp;
+        uint64_t fileCount;
+    };
+    struct IndexEntry {
+        uint16_t relLen;
+        uint16_t filenameLen;
+        // Followed by relative path and filename
+    };
+
     static inline const std::unordered_set<std::string> s_spaExtensions = {
         ".spa",
         ".bin",
@@ -225,6 +306,5 @@ private:
         ""
     };
 };
-
 
 inline const auto g_projectManager = new ProjectManager();

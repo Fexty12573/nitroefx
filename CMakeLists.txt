@@ -91,7 +91,7 @@ target_link_libraries(nitroefx PRIVATE
     ${IMAGEQUANT_LIB})
 
 if (WIN32)
-    target_link_libraries(nitroefx PRIVATE Ws2_32.lib ntdll.lib userenv.lib)
+    target_link_libraries(nitroefx PRIVATE Ws2_32.lib ntdll.lib userenv.lib Mpr.lib)
     target_compile_options(nitroefx PRIVATE /wd4312)
     target_sources(nitroefx PRIVATE data/icon.rc)
     target_compile_definitions(nitroefx PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

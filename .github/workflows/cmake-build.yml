@@ -122,20 +122,21 @@ jobs:
       shell: bash
 
     - name: Package artifact (Windows)
-      if: matrix.os == 'windows-latest'
+      if: matrix.os == 'windows-latest' && github.event_name != 'pull_request'
       shell: pwsh
       run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Path build\nitroefx.exe -DestinationPath "dist\nitroefx-${{ github.ref_name }}-windows.zip" -Force
 
     - name: Package artifact (Linux)
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && github.event_name != 'pull_request'
       shell: bash
       run: |
           mkdir -p dist
           tar -C build/ -czf "dist/nitroefx-${{ github.ref_name }}-linux.tar.gz" nitroefx
 
     - name: Upload artifact
+      if: github.event_name != 'pull_request'
       uses: actions/upload-artifact@v4
       with:
           name: build-${{ matrix.os }}

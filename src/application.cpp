@@ -7,10 +7,12 @@
 #include <SDL3/SDL.h>
 #include <GL/glew.h>
 #include <fmt/compile.h>
+#include <fmt/ranges.h>
 #include <SDL3/SDL_opengl.h>
 #include <imgui.h>
 #include <implot.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
@@ -35,6 +37,7 @@
 #include <fcntl.h>
 #endif
 #include <tinyfiledialogs.h>
+#include "util/wsl.h"
 
 #define KEYBINDSTR(name) getKeybind(ApplicationAction::name)->toString().c_str()
 
@@ -81,6 +84,7 @@ Application::Application() {
         ApplicationAction::PlayAllEmitters,
         ApplicationAction::KillEmitters,
         ApplicationAction::ResetCamera,
+        ApplicationAction::QuickOpen,
     };
 
     m_modifierKeys = {
@@ -155,7 +159,7 @@ int Application::run(int argc, char** argv) {
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 #else
     // Multi-viewport doesn't work very well under WSL
-    if (!Application::isRunningUnderWSL()) {
+    if (!WSLUtil::isRunningUnderWSL()) {
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     }
 #endif
@@ -291,6 +295,8 @@ int Application::run(int argc, char** argv) {
 
         lastFrame = now;
     }
+
+    g_projectManager->closeProject(true);
 
     if (m_updateOnClose) {
         const auto archivePath = downloadLatestArchive();
@@ -871,6 +877,25 @@ void Application::renderPreferences() {
         ImGui::Checkbox("Include pre-release versions", &m_settings.showReleaseCandidates);
 
         m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
+
+        ImGui::SeparatorText("Clear...");
+        if (ImGui::Button("Cache")) {
+            clearCache();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Temporary Files")) {
+            clearTempDir();
+        }
+
+        if (ImGui::Button("Recent Projects")) {
+            m_recentProjects.clear();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Recent Files")) {
+            m_recentFiles.clear();
+        }
 
         ImGui::SeparatorText("Keybinds");
 
@@ -1475,7 +1500,7 @@ void Application::loadConfig() {
     m_settings.checkForUpdates = config.value("checkForUpdates", m_settings.checkForUpdates);
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
     m_settings.uiScale = config.value("uiScale", m_settings.uiScale);
-
+    
     m_editor->loadConfig(config);
 }
 
@@ -1559,6 +1584,9 @@ void Application::executeAction(u32 action) {
     case ApplicationAction::ResetCamera:
         m_editor->resetCamera();
         break;
+    case ApplicationAction::QuickOpen:
+        g_projectManager->openFileSearch();
+        break;
     }
 }
 
@@ -1574,6 +1602,20 @@ void Application::checkArgs(int argc, char** argv) {
         else {
             spdlog::warn("Invalid argument: {}", arg.string());
         }
+    }
+}
+
+void Application::clearCache() {
+    spdlog::info("Clearing cache directory...");
+    const auto cachePath = getCachePath();
+    if (!std::filesystem::exists(cachePath)) {
+        spdlog::info("Cache path does not exist, creating: {}", cachePath.string());
+        std::filesystem::create_directories(cachePath);
+        return;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(cachePath)) {
+        std::filesystem::remove_all(entry.path());
     }
 }
 
@@ -1848,6 +1890,10 @@ std::filesystem::path Application::getExecutablePath() {
     buf[len] = '\0';
     return std::filesystem::path(buf);
 #endif
+}
+
+std::filesystem::path Application::getCachePath() {
+    return getConfigPath() / "cache";
 }
 
 std::string Application::openFile() {
@@ -2178,26 +2224,6 @@ std::optional<AppVersion> Application::findLatestVersion() {
     }
 
     return getNewestVersion(versions);
-}
-
-bool Application::isRunningUnderWSL() {
-#ifdef _WIN32
-    return false;
-#else
-    try {
-        std::ifstream osrelease("/proc/sys/kernel/osrelease");
-        if (!osrelease.is_open()) {
-            return false;
-        }
-        std::string line;
-        std::getline(osrelease, line);
-        osrelease.close();
-
-        return line.contains("microsoft") || line.contains("WSL");
-    } catch (...) {
-        return false;
-    }
-#endif
 }
 
 void Application::applyUpdateNow(const std::filesystem::path& binaryPath, bool relaunch) {

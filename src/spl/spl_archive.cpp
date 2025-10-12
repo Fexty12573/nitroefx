@@ -1,6 +1,7 @@
 #include "spl_archive.h"
 #include "gfx/gl_util.h"
 #include "enum_names.h"
+#include "util/stream.h"
 
 #include <spdlog/spdlog.h>
 #include <fmt/printf.h>
@@ -15,16 +16,6 @@
 
 
 namespace {
-
-template<class T> requires std::is_trivially_copyable_v<T>
-std::istream& operator>>(std::istream& stream, T& v) {
-    return stream.read(reinterpret_cast<char*>(&v), sizeof(T));
-}
-
-template<class T> requires std::is_trivially_copyable_v<T>
-std::ostream& operator<<(std::ostream& stream, const T& v) {
-    return stream.write(reinterpret_cast<const char*>(&v), sizeof(T));
-}
 
 #define ROW(i0, i1, i2, i3, i4, i5, i6, i7) (((i3 << 6) | (i2 << 4) | (i1 << 2) | (i0))), (((i7 << 6) | (i6 << 4) | (i5 << 2) | (i4)))
 

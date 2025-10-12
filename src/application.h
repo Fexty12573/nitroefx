@@ -72,6 +72,7 @@ public:
     static std::filesystem::path getConfigPath();
     static std::filesystem::path getTempPath();
     static std::filesystem::path getExecutablePath();
+    static std::filesystem::path getCachePath();
 
     static std::optional<AppVersion> parseVersion(const std::string& versionStr);
 
@@ -98,6 +99,7 @@ private:
     void clearTempDir();
     void executeAction(u32 action);
     void checkArgs(int argc, char** argv);
+    void clearCache();
 
     void restart();
 
@@ -118,7 +120,6 @@ private:
 
     std::optional<AppVersion> findLatestVersion();
 
-    static bool isRunningUnderWSL();
 
     static size_t writeBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
     static size_t writeHeaderCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
