@@ -81,6 +81,8 @@ std::pair<bool, bool> EditorInstance::render() {
     bool open = true;
     bool active = false;
 
+    ImGui::PushID(m_uniqueID & 0x7FFFFFFF);
+
     m_camera.setViewportHovered(false);
 
     if (m_isTemp) {
@@ -101,6 +103,11 @@ std::pair<bool, bool> EditorInstance::render() {
 
     if (m_isTemp) {
         ImGui::PopFont();
+    }
+
+    if (ImGui::BeginItemTooltip()) {
+        ImGui::Text("%s", getRelativePath().string().c_str());
+        ImGui::EndTooltip();
     }
 
     // Double click to persist the editor
@@ -125,6 +132,8 @@ std::pair<bool, bool> EditorInstance::render() {
     } else {
         m_camera.setActive(false);
     }
+
+    ImGui::PopID();
 
     return { open, active };
 }
@@ -332,6 +341,22 @@ EditorActionType EditorInstance::redo() {
     }
 
     return EditorActionType::None;
+}
+
+std::filesystem::path EditorInstance::getRelativePath() const {
+    if (m_narcIndex != -1) {
+        return fmt::format("N{:05d}.spa", m_narcIndex);
+    }
+
+    if (m_path.empty()) {
+        return "Untitled-" + std::to_string(m_uniqueID & 0xFF) + ".spa";
+    }
+
+    if (g_projectManager->getProjectPath().empty()) {
+        return m_path;
+    }
+
+    return std::filesystem::relative(m_path, g_projectManager->getProjectPath());
 }
 
 std::string EditorInstance::getName() const {

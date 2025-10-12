@@ -65,6 +65,7 @@ public:
     EditorActionType undo();
     EditorActionType redo();
 
+    std::filesystem::path getRelativePath() const;
 
     std::string getName() const;
 
