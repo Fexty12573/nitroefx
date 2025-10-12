@@ -1127,6 +1127,9 @@ void ProjectManager::renderFuzzyFinder() {
                 for (size_t i = (size_t)clipper.DisplayStart; std::cmp_less(i, clipper.DisplayEnd); ++i) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
+
+                    ImGui::PushID((int)i);
+
                     const bool isSel = i == s_selectedResult;
                     const ImGuiSelectableFlags selFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick
                         | (isSel ? ImGuiSelectableFlags_Highlight : ImGuiSelectableFlags_None);
@@ -1158,6 +1161,8 @@ void ProjectManager::renderFuzzyFinder() {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
                     ImGui::TextUnformatted(rows[i].path.c_str());
                     ImGui::PopStyleColor();
+
+                    ImGui::PopID();
                 }
             }
             ImGui::EndTable();
