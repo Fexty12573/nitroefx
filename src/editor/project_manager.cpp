@@ -708,9 +708,18 @@ void ProjectManager::rebuildFuzzyIndex() {
 
     using namespace std::string_view_literals;
 
-    // We probably don't care about files in these directories
-    const auto shouldIgnore = [](std::string_view path) {
-        return path.starts_with(".git"sv) || path.starts_with(".cache"sv);
+    const auto& ignores = g_application->getSettings().indexIgnores;
+
+    // Definitely don't include anything in .git or .cache folders
+    // and anything matching the user-provided ignore prefixes
+    const auto shouldIgnore = [&ignores](std::string_view path) {
+        if (path.starts_with(".git"sv) || path.starts_with(".cache"sv)) {
+            return true;
+        }
+
+        return std::ranges::any_of(ignores, [&path](const auto& ignore) {
+            return path.starts_with(ignore);
+        });
     };
 
     std::vector<FuzzyFileEntry> newFiles;

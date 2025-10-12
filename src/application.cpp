@@ -655,6 +655,8 @@ void Application::renderMenuBar() {
                 m_preferencesOpen = true;
                 m_uiScaleChanged = false;
 
+                m_prefButtonsClicked.reset();
+
                 ImGui::PushOverrideID(m_preferencesWindowId);
                 ImGui::OpenPopup("Preferences##Application");
                 ImGui::PopID();
@@ -807,6 +809,14 @@ void Application::renderPreferences() {
     ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
 
+    const auto maybeDisabledButton = [](const char* label, bool disabled) {
+        ImGui::BeginDisabled(disabled);
+        const bool clicked = ImGui::Button(label);
+        ImGui::EndDisabled();
+
+        return clicked;
+    };
+
     bool wasOpen = m_preferencesOpen;
     if (ImGui::BeginPopupModal("Preferences##Application", &m_preferencesOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::SeparatorText("Updates");
@@ -816,23 +826,37 @@ void Application::renderPreferences() {
 
         m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
 
+        ImGui::SeparatorText("Indexing");
+        ImGui::InputText("Ignored Directories", &m_indexIgnoresStr);
+        if (ImGui::BeginItemTooltip()) {
+            ImGui::Text("';'-separated list of directory names to ignore when indexing a project.");
+            ImGui::Text("Example: 'build;temp;cache'");
+            ImGui::Text("Clearing cache after changing this is recommended.");
+            ImGui::EndTooltip();
+        }
+
         ImGui::SeparatorText("Clear...");
-        if (ImGui::Button("Cache")) {
+
+        if (maybeDisabledButton("Cache", m_prefButtonsClicked.test(PrefButton::Cache))) {
             clearCache();
+            m_prefButtonsClicked.set(PrefButton::Cache);
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Temporary Files")) {
+        if (maybeDisabledButton("Temporary Files", m_prefButtonsClicked.test(PrefButton::TempFiles))) {
             clearTempDir();
+            m_prefButtonsClicked.set(PrefButton::TempFiles);
         }
 
-        if (ImGui::Button("Recent Projects")) {
+        if (maybeDisabledButton("Recent Projects", m_prefButtonsClicked.test(PrefButton::ClearRecentProjects))) {
             m_recentProjects.clear();
+            m_prefButtonsClicked.set(PrefButton::ClearRecentProjects);
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Recent Files")) {
+        if (maybeDisabledButton("Recent Files", m_prefButtonsClicked.test(PrefButton::ClearRecentFiles))) {
             m_recentFiles.clear();
+            m_prefButtonsClicked.set(PrefButton::ClearRecentFiles);
         }
 
         ImGui::SeparatorText("Keybinds");
@@ -909,6 +933,13 @@ void Application::renderPreferences() {
         if (m_uiScaleChanged) {
             ImGui::OpenPopup("Restart Required##Application");
             m_uiScaleChanged = false;
+        }
+
+        using std::operator""s;
+
+        m_settings.indexIgnores.clear();
+        for (const auto dir : std::views::split(m_indexIgnoresStr, ';')) {
+            m_settings.indexIgnores.emplace_back(std::string_view(dir));
         }
     }
 }
@@ -1438,6 +1469,14 @@ void Application::loadConfig() {
     m_settings.checkForUpdates = config.value("checkForUpdates", m_settings.checkForUpdates);
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
     m_settings.uiScale = config.value("uiScale", m_settings.uiScale);
+
+    if (config.contains("indexIgnores") && config["indexIgnores"].is_array()) {
+        for (const auto& ignore : config["indexIgnores"]) {
+            m_settings.indexIgnores.push_back(ignore.get<std::string>());
+        }
+    }
+
+    m_indexIgnoresStr = fmt::format("{}", fmt::join(m_settings.indexIgnores, ";"));
     
     m_editor->loadConfig(config);
 }
@@ -1712,6 +1751,11 @@ void Application::saveConfig() {
     config["checkForUpdates"] = m_settings.checkForUpdates;
     config["showReleaseCandidates"] = m_settings.showReleaseCandidates;
     config["uiScale"] = m_settings.uiScale;
+
+    config["indexIgnores"] = nlohmann::json::array();
+    for (const auto& ignore : m_settings.indexIgnores) {
+        config["indexIgnores"].push_back(ignore);
+    }
 
     m_editor->saveConfig(config);
 

@@ -11,6 +11,7 @@ struct ApplicationSettings {
     bool checkForUpdates;
     bool showReleaseCandidates;
     float uiScale = 1.0f;
+    std::vector<std::string> indexIgnores;
 
     static ApplicationSettings getDefault();
 };

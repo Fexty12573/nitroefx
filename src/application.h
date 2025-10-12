@@ -9,6 +9,7 @@
 #include <SDL3/SDL_events.h>
 #include <string_view>
 
+#include <bitset>
 #include <optional>
 #include <set>
 #include <filesystem>
@@ -56,6 +57,10 @@ public:
 
     std::shared_ptr<GLTexture> getIcon() const {
         return m_icon;
+    }
+
+    const ApplicationSettings& getSettings() const {
+        return m_settings;
     }
 
     std::optional<Keybind> getKeybind(u32 action) const;
@@ -120,7 +125,6 @@ private:
 
     std::optional<AppVersion> findLatestVersion();
 
-
     static size_t writeBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
     static size_t writeHeaderCallback(char* ptr, size_t size, size_t nmemb, void* userdata);
     static size_t writeFileCallback(char* ptr, size_t sz, size_t nm, void* ud);
@@ -142,11 +146,22 @@ private:
     bool isWindowMinimizedOrHidden() const;
     bool isWindowFocused() const;
 
+    enum PrefButton : size_t {
+        Cache = 0,
+        TempFiles,
+        ClearRecentProjects,
+        ClearRecentFiles,
+
+        Count
+    };
+
 private:
     bool m_running = true;
     SDL_Window* m_window = nullptr;
     SDL_GLContext m_context = nullptr;
     std::unique_ptr<Editor> m_editor;
+
+    std::string m_indexIgnoresStr;
 
     std::deque<std::string> m_recentFiles;
     std::deque<std::string> m_recentProjects;
@@ -174,6 +189,8 @@ private:
     bool m_uiScaleChanged = false;
     bool m_reloadFonts = false;
     Keybind* m_listeningKeybind = nullptr;
+
+    std::bitset<PrefButton::Count> m_prefButtonsClicked;
 
     std::set<SDL_Keycode> m_modifierKeys;
 
