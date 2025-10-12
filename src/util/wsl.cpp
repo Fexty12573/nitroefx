@@ -46,15 +46,55 @@ std::optional<WslMapping> detectMapping(const std::filesystem::path& path) {
 
     if (!startsWithWsl(unc)) {
         // Resolve mapped drives
-        DWORD size = 0;
-        DWORD rc = WNetGetUniversalNameW(unc.c_str(), UNIVERSAL_NAME_INFO_LEVEL, nullptr, &size);
-        if (rc == ERROR_MORE_DATA && size > 0) {
-            std::vector<wchar_t> buf((size + sizeof(wchar_t) - 1) / sizeof(wchar_t));
-            const auto info = reinterpret_cast<UNIVERSAL_NAME_INFOW*>(buf.data());
+        // First, try WNetGetUniversalNameW on the full path
+        WCHAR buffer[1024];
+        DWORD size = sizeof(buffer);
 
-            rc = WNetGetUniversalNameW(unc.c_str(), UNIVERSAL_NAME_INFO_LEVEL, info, &size);
-            if (rc == NO_ERROR && info && info->lpUniversalName && *info->lpUniversalName) {
-                unc = info->lpUniversalName;
+        auto* info = reinterpret_cast<UNIVERSAL_NAME_INFOW*>(buffer);
+        DWORD rc = WNetGetUniversalNameW(unc.c_str(), UNIVERSAL_NAME_INFO_LEVEL, info, &size);
+        if (rc == ERROR_MORE_DATA) {
+            // Allocate a buffer of the requested size and try again
+            std::vector<BYTE> dyn;
+            dyn.resize(size);
+            auto* infoDyn = reinterpret_cast<UNIVERSAL_NAME_INFOW*>(dyn.data());
+            rc = WNetGetUniversalNameW(unc.c_str(), UNIVERSAL_NAME_INFO_LEVEL, infoDyn, &size);
+            if (rc == NO_ERROR && infoDyn->lpUniversalName) {
+                unc = infoDyn->lpUniversalName;
+            }
+        } else if (rc == NO_ERROR && info->lpUniversalName) {
+            unc = info->lpUniversalName;
+        }
+
+        // If still not in UNC form, fall back to WNetGetConnectionW using the drive letter
+        if (!startsWithWsl(unc)) {
+            if (unc.size() >= 2 && unc[1] == L':') {
+                const WCHAR drive[3] = { unc[0], L':', L'\0' };
+
+                DWORD remoteSize = 0;
+                DWORD rcConn = WNetGetConnectionW(drive, nullptr, &remoteSize);
+                if (rcConn == ERROR_MORE_DATA && remoteSize > 0) {
+                    std::vector<WCHAR> remote(remoteSize);
+
+                    rcConn = WNetGetConnectionW(drive, remote.data(), &remoteSize);
+                    if (rcConn == NO_ERROR) {
+                        const std::wstring remoteName(remote.data());
+
+                        // Append the remainder of the original path after the drive spec
+                        std::wstring remainder = unc.substr(2);
+                        if (!remoteName.empty() && remoteName.back() == L'\\') {
+                            // Ensure only one backslash when concatenating
+                            if (!remainder.empty() && remainder.front() == L'\\') {
+                                remainder.erase(remainder.begin());
+                            }
+                        } else {
+                            if (remainder.empty() || remainder.front() != L'\\') {
+                                remainder.insert(remainder.begin(), L'\\');
+                            }
+                        }
+
+                        unc = remoteName + remainder;
+                    }
+                }
             }
         }
 
