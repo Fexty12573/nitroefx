@@ -185,7 +185,7 @@ bool enumerateFiles(const WslMapping& mapping, std::vector<std::pair<std::filesy
             continue;
         }
 
-        std::string rel = file;
+        std::string rel = std::move(file);
         if (rel.starts_with(mapping.wslRoot)) {
             rel.erase(0, mapping.wslRoot.size());
 

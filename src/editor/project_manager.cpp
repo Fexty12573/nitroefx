@@ -704,6 +704,13 @@ void ProjectManager::rebuildFuzzyIndex() {
         return;
     }
 
+    using namespace std::string_view_literals;
+
+    // We probably don't care about files in these directories
+    const auto shouldIgnore = [](std::string_view path) {
+        return path.starts_with(".git"sv) || path.starts_with(".cache"sv);
+    };
+
     std::vector<FuzzyFileEntry> newFiles;
     std::unordered_map<std::string, size_t> newIndex;
     newFiles.reserve(4096);
@@ -722,6 +729,10 @@ void ProjectManager::rebuildFuzzyIndex() {
         } else {
             for (const auto& [full, rel] : files) {
                 if (newIndex.contains(rel)) {
+                    continue;
+                }
+
+                if (shouldIgnore(rel)) {
                     continue;
                 }
 
@@ -748,6 +759,10 @@ void ProjectManager::rebuildFuzzyIndex() {
             const auto& p = it.path();
             const auto rel = fs::relative(p, m_projectPath, ec).generic_string();
             if (ec || newIndex.contains(rel)) {
+                continue;
+            }
+
+            if (shouldIgnore(rel)) {
                 continue;
             }
 
@@ -958,6 +973,8 @@ void ProjectManager::updateFuzzyResults() {
     // Weigh filename higher than path
     constexpr double FILENAME_BOOST = 1.15;
 
+    using namespace std::string_view_literals;
+
     for (size_t idx : pool) {
         const auto& f = m_fuzzyFiles[idx];
 
@@ -1071,7 +1088,7 @@ void ProjectManager::renderFuzzyFinder() {
 
         std::vector<Row> rows;
         {
-            std::lock_guard<std::mutex> lock(m_fuzzyMutex);
+            std::scoped_lock lock(m_fuzzyMutex);
             rows.reserve(m_fuzzyResults.size());
             for (const auto& r : m_fuzzyResults) {
                 if (r.index >= m_fuzzyFiles.size()) {
