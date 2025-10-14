@@ -751,6 +751,11 @@ void Application::renderMenuBar() {
                 }
             }
 
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Open SPL File");
+                ImGui::EndTooltip();
+            }
+
             if (ImGui::IconButton(ICON_FA_FOLDER_OPEN, size, AppColors::DarkBeige)) {
                 const auto project = openDirectory();
                 if (!project.empty()) {
@@ -759,10 +764,20 @@ void Application::renderMenuBar() {
                 }
             }
 
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Open Project");
+                ImGui::EndTooltip();
+            }
+
             ImGui::VerticalSeparator(itemHeight);
 
             if (ImGui::IconButton(ICON_FA_FLOPPY_DISK, size, AppColors::LightBlue, hasActiveEditor)) {
                 m_editor->save();
+            }
+
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Save");
+                ImGui::EndTooltip();
             }
 
             ImGui::VerticalSeparator(itemHeight);
@@ -771,8 +786,18 @@ void Application::renderMenuBar() {
                 m_editor->undo();
             }
 
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Undo");
+                ImGui::EndTooltip();
+            }
+
             if (ImGui::IconButton(ICON_FA_ROTATE_RIGHT, size, 0, m_editor->canRedo())) {
                 m_editor->redo();
+            }
+
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Redo");
+                ImGui::EndTooltip();
             }
             
             ImGui::VerticalSeparator(itemHeight);
@@ -781,16 +806,36 @@ void Application::renderMenuBar() {
                 m_editor->playEmitter(EmitterSpawnType::SingleShot);
             }
 
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Play Emitter");
+                ImGui::EndTooltip();
+            }
+
             if (ImGui::IconButton(ICON_FA_REPEAT, size, AppColors::LightGreen2, hasActiveEditor)) {
                 m_editor->playEmitter(EmitterSpawnType::Looped);
+            }
+
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Play Looped Emitter");
+                ImGui::EndTooltip();
             }
 
             if (ImGui::IconButton(ICON_FA_STOP, size, AppColors::LightRed, hasActiveEditor)) {
                 m_editor->killEmitters();
             }
 
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Kill Emitters");
+                ImGui::EndTooltip();
+            }
+
             if (ImGui::IconButton(ICON_FA_CAMERA_ROTATE, size, 0, hasActiveEditor)) {
                 m_editor->resetCamera();
+            }
+
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::TextUnformatted("Reset Camera");
+                ImGui::EndTooltip();
             }
 
             m_editor->renderToolbar(itemHeight);
