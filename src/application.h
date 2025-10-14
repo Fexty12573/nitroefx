@@ -190,6 +190,8 @@ private:
     bool m_reloadFonts = false;
     Keybind* m_listeningKeybind = nullptr;
 
+    float m_lastToolbarWidth = 0.0f;
+
     std::bitset<PrefButton::Count> m_prefButtonsClicked;
 
     std::set<SDL_Keycode> m_modifierKeys;

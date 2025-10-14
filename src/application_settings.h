@@ -12,6 +12,7 @@ struct ApplicationSettings {
     bool showReleaseCandidates;
     float uiScale = 1.0f;
     std::vector<std::string> indexIgnores;
+    bool toolbarCentered;
 
     static ApplicationSettings getDefault();
 };

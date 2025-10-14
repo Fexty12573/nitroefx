@@ -21,6 +21,7 @@ ApplicationSettings ApplicationSettings::getDefault() {
             { ApplicationAction::QuickOpen, { KeybindType::Key, { SDLK_T, SDL_KMOD_CTRL } } },
         },
         .checkForUpdates = true,
-        .showReleaseCandidates = false
+        .showReleaseCandidates = false,
+        .toolbarCentered = true
     };
 };

@@ -743,6 +743,17 @@ void Application::renderMenuBar() {
     
     if (ImGui::BeginViewportSideBar("##SecondaryMenuBar", viewport, ImGuiDir_Up, barHeight, flags)) {
         if (ImGui::BeginMenuBar()) {
+
+            if (m_settings.toolbarCentered && m_lastToolbarWidth > 0.0f) {
+                const float avail = ImGui::GetContentRegionAvail().x;
+                const float offset = (avail - m_lastToolbarWidth) * 0.5f;
+                if (offset > 0.0f) {
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+                }
+            }
+
+            float startX = ImGui::GetCursorPosX();
+
             if (ImGui::IconButton(ICON_FA_FILE, size)) {
                 const auto file = openFile();
                 if (!file.empty()) {
@@ -840,6 +851,8 @@ void Application::renderMenuBar() {
 
             m_editor->renderToolbar(itemHeight);
 
+            m_lastToolbarWidth = ImGui::GetCursorPosX() - startX;
+
             ImGui::EndMenuBar();
         }
     }
@@ -864,104 +877,119 @@ void Application::renderPreferences() {
 
     bool wasOpen = m_preferencesOpen;
     if (ImGui::BeginPopupModal("Preferences##Application", &m_preferencesOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::SeparatorText("Updates");
+        if (ImGui::BeginTable("##preferences_layout", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("left", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+            ImGui::TableSetupColumn("right", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableNextRow();
 
-        ImGui::Checkbox("Check for updates on startup", &m_settings.checkForUpdates);
-        ImGui::Checkbox("Include pre-release versions", &m_settings.showReleaseCandidates);
+            // Left: Updates, Interface, Indexing, Clear...
+            ImGui::TableSetColumnIndex(0);
+            ImGui::SeparatorText("Updates");
+            ImGui::Checkbox("Check for updates on startup", &m_settings.checkForUpdates);
+            ImGui::Checkbox("Include pre-release versions", &m_settings.showReleaseCandidates);
 
-        m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
+            ImGui::Spacing();
+            ImGui::SeparatorText("Interface");
+            m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
+            ImGui::Checkbox("Center Toolbar", &m_settings.toolbarCentered);
 
-        ImGui::SeparatorText("Indexing");
-        ImGui::InputText("Ignored Directories", &m_indexIgnoresStr);
-        if (ImGui::BeginItemTooltip()) {
-            ImGui::Text("';'-separated list of directory names to ignore when indexing a project.");
-            ImGui::Text("Example: 'build;temp;cache'");
-            ImGui::Text("Clearing cache after changing this is recommended.");
-            ImGui::EndTooltip();
-        }
-
-        ImGui::SeparatorText("Clear...");
-
-        if (maybeDisabledButton("Cache", m_prefButtonsClicked.test(PrefButton::Cache))) {
-            clearCache();
-            m_prefButtonsClicked.set(PrefButton::Cache);
-        }
-
-        ImGui::SameLine();
-        if (maybeDisabledButton("Temporary Files", m_prefButtonsClicked.test(PrefButton::TempFiles))) {
-            clearTempDir();
-            m_prefButtonsClicked.set(PrefButton::TempFiles);
-        }
-
-        if (maybeDisabledButton("Recent Projects", m_prefButtonsClicked.test(PrefButton::ClearRecentProjects))) {
-            m_recentProjects.clear();
-            m_prefButtonsClicked.set(PrefButton::ClearRecentProjects);
-        }
-
-        ImGui::SameLine();
-        if (maybeDisabledButton("Recent Files", m_prefButtonsClicked.test(PrefButton::ClearRecentFiles))) {
-            m_recentFiles.clear();
-            m_prefButtonsClicked.set(PrefButton::ClearRecentFiles);
-        }
-
-        ImGui::SeparatorText("Keybinds");
-
-        if (ImGui::BeginTable("Keybinds##Application", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH)) {
-            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Keybind", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableHeadersRow();
-            
-            for (auto action : m_sortedActions) {
-                auto& keybind = m_settings.keybinds[action];
-
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-
-                ImGui::AlignTextToFramePadding();
-                ImGui::TextUnformatted(ApplicationAction::Names.at(action));
-                
-                ImGui::TableSetColumnIndex(1);
-                ImGui::SetNextItemWidth(300);
-
-                constexpr auto flags = ImGuiSelectableFlags_SpanAvailWidth | ImGuiSelectableFlags_NoAutoClosePopups;
-                if (ImGui::Selectable(keybind.toString().c_str(), false, flags)) {
-                    m_listeningForInput = true;
-                    m_listeningKeybind = &keybind;
-                    ImGui::OpenPopup("Keybind##Application");
-                }
+            ImGui::Spacing();
+            ImGui::SeparatorText("Indexing");
+            ImGui::InputText("Ignored Directories", &m_indexIgnoresStr);
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::Text("';'-separated list of directory names to ignore when indexing a project.");
+                ImGui::Text("Example: 'build;temp;cache'");
+                ImGui::Text("Clearing cache after changing this is recommended.");
+                ImGui::EndTooltip();
             }
 
-            if (m_listeningForInput) {
-                ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 0.0f);
-                // Place the popup in the center of the window
-                const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-                ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-                ImGui::SetNextWindowSize({ 350, 200 }, ImGuiCond_Always);
+            ImGui::Spacing();
+            ImGui::SeparatorText("Clear...");
+            if (maybeDisabledButton("Cache", m_prefButtonsClicked.test(PrefButton::Cache))) {
+                clearCache();
+                m_prefButtonsClicked.set(PrefButton::Cache);
+            }
 
-                constexpr auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
-                if (ImGui::BeginPopupModal("Keybind##Application", nullptr, flags)) {
-                    const auto drawList = ImGui::GetWindowDrawList();
+            ImGui::SameLine();
+            if (maybeDisabledButton("Temporary Files", m_prefButtonsClicked.test(PrefButton::TempFiles))) {
+                clearTempDir();
+                m_prefButtonsClicked.set(PrefButton::TempFiles);
+            }
 
-                    const auto windowPos = ImGui::GetWindowPos();
-                    const auto windowSize = ImGui::GetWindowSize();
-                    const auto textSize = ImGui::CalcTextSize("Press any key or button to bind");
+            if (maybeDisabledButton("Recent Projects", m_prefButtonsClicked.test(PrefButton::ClearRecentProjects))) {
+                m_recentProjects.clear();
+                m_prefButtonsClicked.set(PrefButton::ClearRecentProjects);
+            }
 
-                    const auto textPos = windowPos + ImVec2((windowSize.x - textSize.x) / 2, (windowSize.y - textSize.y) / 2);
-                    drawList->AddText(
-                        textPos, 
-                        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f)), 
-                        "Press any key or button to bind"
-                    );
+            ImGui::SameLine();
+            if (maybeDisabledButton("Recent Files", m_prefButtonsClicked.test(PrefButton::ClearRecentFiles))) {
+                m_recentFiles.clear();
+                m_prefButtonsClicked.set(PrefButton::ClearRecentFiles);
+            }
 
-                    if (m_exitKeybindListening) {
-                        ImGui::CloseCurrentPopup();
-                        m_exitKeybindListening = false;
+            // Right: Clear... and Keybinds
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SeparatorText("Keybinds");
+
+            if (ImGui::BeginTable("Keybinds##Application", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH | ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Keybind", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
+                
+                for (auto action : m_sortedActions) {
+                    auto& keybind = m_settings.keybinds[action];
+
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(ApplicationAction::Names.at(action));
+                    
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+
+                    constexpr auto flags = ImGuiSelectableFlags_SpanAvailWidth | ImGuiSelectableFlags_NoAutoClosePopups;
+                    if (ImGui::Selectable(keybind.toString().c_str(), false, flags)) {
+                        m_listeningForInput = true;
+                        m_listeningKeybind = &keybind;
+                        ImGui::OpenPopup("Keybind##Application");
                     }
-
-                    ImGui::EndPopup();
                 }
 
-                ImGui::PopStyleVar();
+                if (m_listeningForInput) {
+                    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 0.0f);
+                    // Place the popup in the center of the window
+                    const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+                    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                    ImGui::SetNextWindowSize({ 350, 200 }, ImGuiCond_Always);
+
+                    constexpr auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
+                    if (ImGui::BeginPopupModal("Keybind##Application", nullptr, flags)) {
+                        const auto drawList = ImGui::GetWindowDrawList();
+
+                        const auto windowPos = ImGui::GetWindowPos();
+                        const auto windowSize = ImGui::GetWindowSize();
+                        const auto textSize = ImGui::CalcTextSize("Press any key or button to bind");
+
+                        const auto textPos = windowPos + ImVec2((windowSize.x - textSize.x) / 2, (windowSize.y - textSize.y) / 2);
+                        drawList->AddText(
+                            textPos, 
+                            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f)), 
+                            "Press any key or button to bind"
+                        );
+
+                        if (m_exitKeybindListening) {
+                            ImGui::CloseCurrentPopup();
+                            m_exitKeybindListening = false;
+                        }
+
+                        ImGui::EndPopup();
+                    }
+
+                    ImGui::PopStyleVar();
+                }
+
+                ImGui::EndTable();
             }
 
             ImGui::EndTable();
@@ -1522,6 +1550,8 @@ void Application::loadConfig() {
     }
 
     m_indexIgnoresStr = fmt::format("{}", fmt::join(m_settings.indexIgnores, ";"));
+
+    m_settings.toolbarCentered = config.value("toolbarCentered", m_settings.toolbarCentered);
     
     m_editor->loadConfig(config);
 }
@@ -1801,6 +1831,8 @@ void Application::saveConfig() {
     for (const auto& ignore : m_settings.indexIgnores) {
         config["indexIgnores"].push_back(ignore);
     }
+
+    config["toolbarCentered"] = m_settings.toolbarCentered;
 
     m_editor->saveConfig(config);
 
