@@ -4,6 +4,7 @@
 #include "editor/editor.h"
 #include "editor/project_manager.h"
 #include "gfx/gl_texture.h"
+#include "version.h"
 
 #include <argparse/argparse.hpp>
 #include <SDL3/SDL_events.h>
@@ -18,11 +19,15 @@
 
 
 struct AppVersion {
-    int major;
-    int minor;
-    int patch;
-    bool isRC;
-    int rc;
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+    bool isRC = false;
+    int rc = 0;
+    bool isDev = false; // Not exactly on a release tag
+    int commitsAhead = -1; // N in "vX.Y.Z-N-gHASH" (>=0 if known, -1 unknown)
+    std::string gitHash;
+    bool isDirty = false; // Whether there are uncommitted changes
     std::string str;
 };
 
@@ -83,7 +88,7 @@ public:
 
     static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
 
-    static constexpr auto VERSION = "v1.3.0";
+    static constexpr auto VERSION = NITROEFX_VERSION;
 
 private:
     void pollEvents();

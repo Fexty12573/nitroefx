@@ -2,3 +2,4 @@
 build/
 .vs/
 .vscode/
+version.h

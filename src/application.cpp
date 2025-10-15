@@ -1828,23 +1828,51 @@ void Application::restart() {
 }
 
 std::optional<AppVersion> Application::parseVersion(const std::string& versionStr) {
-    static const std::regex re(R"(^v(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$)");
+    static const std::regex devPattern(R"(^v(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?(?:-(\d+)-g([0-9a-fA-F]+))?(?:-(dirty))?$)");
+    static const std::regex tagPattern(R"(^v(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$)");
     std::smatch m;
+    AppVersion v{};
 
-    if (!std::regex_match(versionStr, m, re)) {
+    if (std::regex_match(versionStr, m, devPattern)) {
+        v.major = std::stoi(m[1].str());
+        v.minor = std::stoi(m[2].str());
+        v.patch = std::stoi(m[3].str());
+        v.isRC = m[4].matched;
+        v.rc = v.isRC ? std::stoi(m[4].str()) : 0;
+
+        if (m[5].matched) {
+            v.isDev = true;
+            v.commitsAhead = std::stoi(m[5].str());
+        } else {
+            v.commitsAhead = 0;
+        }
+
+        if (m[6].matched) {
+            v.gitHash = m[6].str();
+            v.isDev = v.isDev || !v.gitHash.empty();
+        }
+
+        if (m[7].matched) {
+            v.isDirty = true;
+            v.isDev = true;
+        }
+
+        return v;
+    }
+
+    if (!std::regex_match(versionStr, m, tagPattern)) {
         spdlog::error("Invalid version format: {}", versionStr);
         return std::nullopt;
     }
 
-    AppVersion version;
-    version.major = std::stoi(m[1].str());
-    version.minor = std::stoi(m[2].str());
-    version.patch = std::stoi(m[3].str());
-    version.isRC = m[4].matched;
-    version.rc = version.isRC ? std::stoi(m[4].str()) : 0;
-    version.str = versionStr;
+    v.major = std::stoi(m[1].str());
+    v.minor = std::stoi(m[2].str());
+    v.patch = std::stoi(m[3].str());
+    v.isRC = m[4].matched;
+    v.rc = v.isRC ? std::stoi(m[4].str()) : 0;
+    v.str = versionStr;
 
-    return version;
+    return v;
 }
 
 int Application::update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch) {
@@ -2207,11 +2235,25 @@ void Application::initDefaultDockingLayout() {
 }
 
 bool Application::isVersionNewer(const AppVersion& current, const AppVersion& other) const {
+    if (current.isDev != other.isDev) return !current.isDev && other.isDev; // Dev version is always the newest
+
+    // Both are either dev or not dev, compare normally
     if (current.major != other.major) return current.major < other.major;
     if (current.minor != other.minor) return current.minor < other.minor;
     if (current.patch != other.patch) return current.patch < other.patch;
     if (current.isRC != other.isRC) return current.isRC && !other.isRC;
     if (current.isRC) return current.rc < other.rc;
+
+    // If both are dev versions, compare commits ahead and dirty state
+    if (current.isDev && other.isDev) {
+        const bool curKnown = current.commitsAhead >= 0;
+        const bool othKnown = other.commitsAhead >= 0;
+        if (curKnown && othKnown && current.commitsAhead != other.commitsAhead) return current.commitsAhead < other.commitsAhead;
+        if (current.isDirty != other.isDirty) return !current.isDirty && other.isDirty; // clean < dirty
+
+        return false; // Both unknown, they are equal
+    }
+
     return false; // They are equal
 }
 

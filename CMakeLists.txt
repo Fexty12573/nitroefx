@@ -39,6 +39,24 @@ b_embed(nitroefx data/nitroefx.png)
 
 set(LIBIMAGEQUANT_DIR ${CMAKE_SOURCE_DIR}/external/libimagequant)
 
+execute_process(
+    COMMAND git describe --tags --dirty --always
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE NITROEFX_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if (NOT NITROEFX_VERSION)
+    set(NITROEFX_VERSION "v0.0.0")
+endif()
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/version.h.in
+    ${CMAKE_SOURCE_DIR}/src/version.h
+    @ONLY
+)
+
 if (WIN32 AND NOT CMAKE_BUILD_TYPE MATCHES Debug)
     set_target_properties(nitroefx PROPERTIES WIN32_EXECUTABLE true)
 endif()

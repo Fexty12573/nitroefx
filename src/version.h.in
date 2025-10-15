@@ -1,0 +1,2 @@
+#pragma once
+#define NITROEFX_VERSION "@NITROEFX_VERSION@"
