@@ -40,7 +40,6 @@ b_embed(nitroefx data/nitroefx.png)
 set(LIBIMAGEQUANT_DIR ${CMAKE_SOURCE_DIR}/external/libimagequant)
 
 if (WIN32 AND NOT CMAKE_BUILD_TYPE MATCHES Debug)
-    message("Using WinMain for Windows builds")
     set_target_properties(nitroefx PROPERTIES WIN32_EXECUTABLE true)
 endif()
 
@@ -97,4 +96,7 @@ if (WIN32)
     target_compile_definitions(nitroefx PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 else()
     target_compile_options(nitroefx PRIVATE -Wno-int-to-pointer-cast -Wno-deprecated-enum-enum-conversion)
+    if (CMAKE_BUILD_TYPE MATCHES Debug)
+        target_compile_definitions(nitroefx PRIVATE _DEBUG) # Match MSVC debug define
+    endif()
 endif()

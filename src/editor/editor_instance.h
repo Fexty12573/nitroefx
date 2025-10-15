@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <utility> // std::pair
 #include <SDL3/SDL_events.h>
@@ -14,7 +15,7 @@
 
 class EditorInstance {
 public:
-    explicit EditorInstance(const std::filesystem::path& path, bool isTemp = false);
+    explicit EditorInstance(const std::filesystem::path& path, bool isTemp = false, bool isRecovered = false);
     explicit EditorInstance(size_t narcIndex, std::span<const char> data, bool isTemp = false);
     EditorInstance(bool isTemp = false);
 
@@ -45,12 +46,18 @@ public:
         return m_isTemp;
     }
 
+    bool isRecovered() const {
+        return m_isRecovered;
+    }
+
     void duplicateResource(size_t index);
     void deleteResource(size_t index);
     void addResource();
 
     void save();
     void saveAs(const std::filesystem::path& path);
+    void saveTo(const std::filesystem::path& path);
+    void saveBackup();
 
     void pushHistory();
 
@@ -66,6 +73,7 @@ public:
     EditorActionType redo();
 
     std::filesystem::path getRelativePath() const;
+    std::filesystem::path getBackupPath() const;
 
     std::string getName() const;
 
@@ -101,6 +109,12 @@ public:
         m_updateProj = true;
     }
 
+    using Clock = std::chrono::steady_clock;
+
+    std::chrono::time_point<Clock> getLastBackupTime() const {
+        return m_lastBackupTime;
+    }
+
 private:
     std::filesystem::path m_path;
     size_t m_narcIndex = -1;
@@ -110,6 +124,8 @@ private:
     Camera m_camera;
     EditorHistory m_history;
 
+    std::chrono::time_point<Clock> m_lastBackupTime;
+
     size_t m_selectedResource = -1;
     SPLResource m_resourceBefore;
 
@@ -117,5 +133,6 @@ private:
     bool m_updateProj;
     bool m_isTemp = false;
     bool m_modified = false; // Has the file been modified?
+    bool m_isRecovered = false; // Was this instance recovered from a backup?
     u64 m_uniqueID;
 };

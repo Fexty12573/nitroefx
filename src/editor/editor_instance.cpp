@@ -11,11 +11,16 @@
 #include <glm/ext/matrix_transform.hpp>
 
 
-EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp)
+EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp, bool isRecovered)
     : m_path(path), m_archive(path)
     , m_particleSystem(g_application->getEditor()->getSettings().maxParticles, m_archive.getTextures())
-    , m_camera(glm::radians(45.0f), { 800, 800 }, 1.0f, 500.0f), m_isTemp(isTemp) {
+    , m_camera(glm::radians(45.0f), { 800, 800 }, 1.0f, 500.0f), m_isTemp(isTemp), m_isRecovered(isRecovered) {
 
+    if (m_isRecovered) {
+        m_modified = true;
+    }
+
+    m_lastBackupTime = Clock::now();
     m_uniqueID = SPLRandom::nextU64();
     m_updateProj = true;
     notifyResourceChanged(0);
@@ -106,7 +111,7 @@ std::pair<bool, bool> EditorInstance::render() {
     }
 
     if (ImGui::BeginItemTooltip()) {
-        ImGui::Text("%s", getRelativePath().string().c_str());
+        ImGui::TextUnformatted(getRelativePath().string().c_str());
         ImGui::EndTooltip();
     }
 
@@ -291,21 +296,47 @@ void EditorInstance::save() {
         return;
     }
 
-    if (m_path.empty()) {
+    if (m_path.empty() || m_isRecovered) {
         const auto file = Application::saveFile();
         if (!file.empty()) {
             m_path = file;
+        } else {
+            spdlog::warn("Aborted save, no path specified");
+            return;
         }
     }
 
     m_archive.save(m_path);
     m_modified = false;
+    m_isRecovered = false;
+    
+    const auto backupPath = getBackupPath();
+    if (std::filesystem::exists(backupPath)) {
+        std::filesystem::remove(backupPath);
+    }
 }
 
 void EditorInstance::saveAs(const std::filesystem::path& path) {
     m_path = path;
     m_narcIndex = -1; // Reset NARC index since we're saving to a new file
     return save();
+}
+
+void EditorInstance::saveTo(const std::filesystem::path& path) {
+    m_archive.save(path);
+}
+
+void EditorInstance::saveBackup() {
+    const auto backupPath = getBackupPath();
+    const auto backupDir = backupPath.parent_path();
+    if (!std::filesystem::exists(backupDir)) {
+        std::filesystem::create_directories(backupDir);
+    }
+
+    spdlog::info("Saving backup of {} to {}", getName(), backupPath.string());
+
+    m_archive.save(backupPath);
+    m_lastBackupTime = Clock::now();
 }
 
 void EditorInstance::pushHistory() {
@@ -352,11 +383,16 @@ std::filesystem::path EditorInstance::getRelativePath() const {
         return "Untitled-" + std::to_string(m_uniqueID & 0xFF) + ".spa";
     }
 
-    if (g_projectManager->getProjectPath().empty()) {
+    if (!g_projectManager->hasProject()) {
         return m_path;
     }
 
     return std::filesystem::relative(m_path, g_projectManager->getProjectPath());
+}
+
+std::filesystem::path EditorInstance::getBackupPath() const {
+    const auto backupDir = g_application->getTempPath() / "backups";
+    return backupDir / fmt::format("{:x}~{}", m_uniqueID & 0xFFFFFFFF, getName());
 }
 
 std::string EditorInstance::getName() const {

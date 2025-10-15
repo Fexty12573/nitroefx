@@ -151,7 +151,7 @@ void ProjectManager::closeProject(bool force) {
     }
 }
 
-void ProjectManager::openEditor(const fs::path& path) {
+void ProjectManager::openEditor(const fs::path& path, bool isRecovered) {
     const auto existing = getEditor(path);
     if (existing) {
         m_activeEditor = existing;
@@ -165,7 +165,7 @@ void ProjectManager::openEditor(const fs::path& path) {
         return;
     }
 
-    const auto editor = std::make_shared<EditorInstance>(path);
+    const auto editor = std::make_shared<EditorInstance>(path, false, isRecovered);
     if (m_openEditors.empty()) {
         m_activeEditor = editor;
     }

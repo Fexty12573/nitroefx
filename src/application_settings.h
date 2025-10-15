@@ -3,6 +3,7 @@
 #include "keybind.h"
 #include "util/crc32.h"
 
+#include <chrono>
 #include <map>
 
 
@@ -10,9 +11,10 @@ struct ApplicationSettings {
     std::map<u32, Keybind> keybinds;
     bool checkForUpdates;
     bool showReleaseCandidates;
+    bool toolbarCentered;
     float uiScale = 1.0f;
     std::vector<std::string> indexIgnores;
-    bool toolbarCentered;
+    std::chrono::seconds backupInterval; // zero duration means disabled
 
     static ApplicationSettings getDefault();
 };

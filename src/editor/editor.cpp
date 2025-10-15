@@ -50,6 +50,25 @@ Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer() {
     m_tutorialWindowId = ImHashStr("Tutorial##Editor");
 }
 
+void Editor::update(float deltaTime) {
+    (void)deltaTime;
+    const auto now = EditorInstance::Clock::now();
+    const auto backupInterval = g_application->getSettings().backupInterval;
+
+    for (const auto& editor : g_projectManager->getOpenEditors()) {
+        // Temporary, recovered, or unmodified editors don't get backed up
+        if (editor->isTemp() || editor->isRecovered() || !editor->isModified()) {
+            continue;
+        }
+
+        const auto lastBackup = editor->getLastBackupTime();
+        const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastBackup);
+        if (elapsed >= backupInterval) {
+            editor->saveBackup();
+        }
+    }
+}
+
 void Editor::render() {
     const auto& instances = g_projectManager->getOpenEditors();
 

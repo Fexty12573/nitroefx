@@ -24,6 +24,7 @@ class Editor {
 public:
     Editor();
 
+    void update(float deltaTime);
     void render();
     void renderParticles();
     void renderMenu(std::string_view name);

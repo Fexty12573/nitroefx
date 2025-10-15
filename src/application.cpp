@@ -8,6 +8,7 @@
 #include <GL/glew.h>
 #include <fmt/compile.h>
 #include <fmt/ranges.h>
+#include <fmt/chrono.h>
 #include <SDL3/SDL_opengl.h>
 #include <imgui.h>
 #include <implot.h>
@@ -171,7 +172,12 @@ int Application::run(int argc, char** argv) {
     m_settings = ApplicationSettings::getDefault();
     g_projectManager->init(m_editor.get());
 
-    clearTempDir();
+    checkForBackups();
+
+    if (m_backupFiles.empty()) {
+        clearTempDir();
+    }
+
     loadConfig();
     loadFonts();
     loadIcon();
@@ -190,7 +196,7 @@ int Application::run(int argc, char** argv) {
     m_aboutWindowId = ImHashStr("About##Application");
     m_updateWindowId = ImHashStr("Update##Application");
     m_welcomeWindowId = ImHashStr("Welcome##Application");
-
+    m_backupsWindowId = ImHashStr("Backups##Application");
 
     using clock = std::chrono::high_resolution_clock;
     auto lastFrame = clock::now();
@@ -214,6 +220,8 @@ int Application::run(int argc, char** argv) {
             loadFonts();
             m_reloadFonts = false;
         }
+
+        m_editor->update(delta);
 
         if (!idle || activeEmitters) {
             m_editor->updateParticles(delta);
@@ -260,13 +268,21 @@ int Application::run(int argc, char** argv) {
             }
 
             if (m_firstFrame) {
-                ImGui::PushOverrideID(m_welcomeWindowId);
-                ImGui::OpenPopup("Welcome to NitroEFX");
-                ImGui::PopID();
+                if (!m_backupFiles.empty()) {
+                    ImGui::PushOverrideID(m_backupsWindowId);
+                    ImGui::OpenPopup("Recovered Files");
+                    ImGui::PopID();
+                } else {
+                    ImGui::PushOverrideID(m_welcomeWindowId);
+                    ImGui::OpenPopup("Welcome to NitroEFX");
+                    ImGui::PopID();
+                }
                 m_firstFrame = false;
             }
 
             renderWelcomeWindow();
+
+            renderBackupsWindow();
 
             renderUpdateWindow();
 
@@ -904,6 +920,31 @@ void Application::renderPreferences() {
             }
 
             ImGui::Spacing();
+            ImGui::SeparatorText("Backups");
+            bool backupsEnabled = m_settings.backupInterval.count() > 0;
+            if (ImGui::Checkbox("Enabled", &backupsEnabled)) {
+                if (backupsEnabled) {
+                    m_settings.backupInterval = std::chrono::minutes(1);
+                } else {
+                    m_settings.backupInterval = std::chrono::seconds(0);
+                }
+            }
+
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::Text("Automatically create backups of unsaved files at regular intervals.");
+                ImGui::Text("Backups are stored in the application's Temp directory.");
+                ImGui::EndTooltip();
+            }
+
+            ImGui::BeginDisabled(!backupsEnabled);
+            
+            s64 intervalSeconds = m_settings.backupInterval.count();
+            ImGui::InputScalar("Interval", ImGuiDataType_S64, &intervalSeconds, nullptr, nullptr, "%ds");
+            m_settings.backupInterval = std::chrono::seconds(std::max<s64>(intervalSeconds, 0));
+
+            ImGui::EndDisabled();
+
+            ImGui::Spacing();
             ImGui::SeparatorText("Clear...");
             if (maybeDisabledButton("Cache", m_prefButtonsClicked.test(PrefButton::Cache))) {
                 clearCache();
@@ -927,7 +968,7 @@ void Application::renderPreferences() {
                 m_prefButtonsClicked.set(PrefButton::ClearRecentFiles);
             }
 
-            // Right: Clear... and Keybinds
+            // Right: Keybinds
             ImGui::TableSetColumnIndex(1);
             ImGui::SeparatorText("Keybinds");
 
@@ -1319,6 +1360,70 @@ void Application::renderRestartPopup() {
     }
 }
 
+void Application::renderBackupsWindow() {
+    ImGui::PushOverrideID(m_backupsWindowId);
+    
+    const auto popupPos = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(popupPos, ImGuiCond_Appearing, { 0.5f, 0.5f });
+
+    if (ImGui::BeginPopupModal("Recovered Files", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        const auto windowSize = ImGui::GetWindowSize();
+        if (m_icon) {
+            constexpr auto iconSize = 80.0f;
+            ImGui::SetCursorPosX((windowSize.x - iconSize) * 0.5f);
+            ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
+        }
+
+        ImGui::PushFont(getFont("Large"));
+        ImGui::Text("The following unsaved files have been recovered:");
+        ImGui::PopFont();
+
+        ImGui::Separator();
+        if (ImGui::BeginTable("##backups_layout", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+            ImGui::TableSetupColumn("Backup Time", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableHeadersRow();
+
+            for (const auto& path : m_backupFiles) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(path.filename().string().c_str());
+                ImGui::TableSetColumnIndex(1);
+
+                const auto ftime = std::filesystem::last_write_time(path);
+                const auto systime = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+                ImGui::TextUnformatted(fmt::format("{:%Y-%m-%d %H:%M:%S}", systime).c_str());
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Open")) {
+            for (const auto& path : m_backupFiles) {
+                g_projectManager->openEditor(path, true);
+            }
+
+            m_backupFiles.clear();
+            ImGui::CloseCurrentPopup();
+            clearTempDir();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Discard")) {
+            m_backupFiles.clear();
+            ImGui::CloseCurrentPopup();
+            clearTempDir();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopID();
+}
+
 void Application::setColors() {
     ImGuiStyle& style = ImGui::GetStyle();
 
@@ -1552,6 +1657,7 @@ void Application::loadConfig() {
     m_indexIgnoresStr = fmt::format("{}", fmt::join(m_settings.indexIgnores, ";"));
 
     m_settings.toolbarCentered = config.value("toolbarCentered", m_settings.toolbarCentered);
+    m_settings.backupInterval = std::chrono::seconds(config.value("backupInterval", m_settings.backupInterval.count()));
     
     m_editor->loadConfig(config);
 }
@@ -1684,6 +1790,20 @@ void Application::clearCache() {
     }
 }
 
+void Application::checkForBackups() {
+    const auto backupDir = getTempPath() / "backups";
+    if (!std::filesystem::exists(backupDir)) {
+        return;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(backupDir)) {
+        if (entry.is_regular_file()) {
+            spdlog::info("Found backup file: {}", entry.path().string());
+            m_backupFiles.push_back(entry.path());
+        }
+    }
+}
+
 void Application::restart() {
     const auto exePath = getExecutablePath();
 #ifdef _WIN32
@@ -1692,6 +1812,11 @@ void Application::restart() {
     PROCESS_INFORMATION pi{};
     if (CreateProcessW(nullptr, exePath.wstring().data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi) == 0) {
         spdlog::error("Failed to restart application: {}", GetLastError());
+    }
+
+    if (pi.hProcess) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
     }
 #else
     auto exePathString = exePath.string();
@@ -1833,6 +1958,7 @@ void Application::saveConfig() {
     }
 
     config["toolbarCentered"] = m_settings.toolbarCentered;
+    config["backupInterval"] = m_settings.backupInterval.count();
 
     m_editor->saveConfig(config);
 
@@ -1983,10 +2109,14 @@ std::string Application::openFile() {
 }
 
 std::string Application::saveFile(const std::string& default_path) {
+    const auto defaultPath = default_path.empty() && g_projectManager->hasProject()
+        ? g_projectManager->getProjectPath().string()
+        : default_path;
+
     const char* filters[] = { "*.spa" };
     const char* result = tinyfd_saveFileDialog(
         "Save File",
-        default_path.c_str(),
+        defaultPath.c_str(),
         1,
         filters,
         "SPL Files"

@@ -97,6 +97,7 @@ private:
     void renderUpdateWindow();
     void renderWelcomeWindow();
     void renderRestartPopup();
+    void renderBackupsWindow();
     void setColors();
     void loadFonts();
     void loadConfig();
@@ -105,6 +106,7 @@ private:
     void executeAction(u32 action);
     void checkArgs(int argc, char** argv);
     void clearCache();
+    void checkForBackups();
 
     void restart();
 
@@ -163,6 +165,7 @@ private:
 
     std::string m_indexIgnoresStr;
 
+    std::vector<std::filesystem::path> m_backupFiles;
     std::deque<std::string> m_recentFiles;
     std::deque<std::string> m_recentProjects;
 
@@ -181,6 +184,7 @@ private:
     ImGuiID m_aboutWindowId = 0;
     ImGuiID m_updateWindowId = 0;
     ImGuiID m_welcomeWindowId = 0;
+    ImGuiID m_backupsWindowId = 0;
     bool m_preferencesOpen = false;
     bool m_aboutWindowOpen = false;
     bool m_listeningForInput = false;

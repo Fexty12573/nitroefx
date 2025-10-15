@@ -28,7 +28,7 @@ public:
     void init(Editor* editor);
     void openProject(const std::filesystem::path& path);
     void closeProject(bool force = false);
-    void openEditor(const std::filesystem::path& path);
+    void openEditor(const std::filesystem::path& path, bool isRecovered = false);
     void openEditor(); // Create an editor without an associated file
     void openTempEditor(const std::filesystem::path& path);
     void openNarcProject(const std::filesystem::path& path);

@@ -22,6 +22,7 @@ ApplicationSettings ApplicationSettings::getDefault() {
         },
         .checkForUpdates = true,
         .showReleaseCandidates = false,
-        .toolbarCentered = true
+        .toolbarCentered = true,
+        .backupInterval = std::chrono::seconds(60) // 1 minute
     };
 };
