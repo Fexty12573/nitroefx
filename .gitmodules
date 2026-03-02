@@ -12,3 +12,6 @@
 [submodule "external/microtar"]
 	path = external/microtar
 	url = https://github.com/rxi/microtar.git
+[submodule "external/nitroarc"]
+	path = external/nitroarc
+	url = https://codeberg.org/lhearachel/nitroarc.git
