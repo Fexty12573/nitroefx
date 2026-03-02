@@ -41,7 +41,27 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libxmu-dev libxi-dev libgl-dev zip autoconf autoconf-archive automake libtool pkg-config libglu1-mesa-dev libltdl-dev mono-complete libxtst-dev
+        sudo apt-get install -y \
+          libxmu-dev \
+          libxi-dev \
+          libgl-dev \
+          zip \
+          autoconf \
+          autoconf-archive \
+          automake \
+          libtool \
+          pkg-config \
+          libglu1-mesa-dev \
+          libltdl-dev \
+          mono-complete \
+          libxtst-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libxfixes-dev \
+          libxi-dev \
+          libxss-dev \
+          libxkbcommon-dev \
+          libdrm-dev
       shell: bash
 
     - name: Install vcpkg
