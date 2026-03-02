@@ -38,7 +38,7 @@ cmake --build build
 ### Linux
 On Ubuntu, the following packages are required (and probably some others):
 ```bash
-sudo apt install libxmu-dev libxi-dev libgl-dev zip autoconf automake libtool pkg-config libglu1-mesa-dev libltdl-dev
+sudo apt install libxmu-dev libxi-dev libgl-dev zip autoconf autoconf-archive automake libtool pkg-config libglu1-mesa-dev libltdl-dev libxtst-dev
 ```
 
 Then, run the following commands:
