@@ -3,3 +3,4 @@ build/
 .vs/
 .vscode/
 version.h
+library_versions.h

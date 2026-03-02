@@ -23,6 +23,7 @@ find_package(CURL CONFIG REQUIRED)
 find_package(minizip-ng CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(efsw CONFIG REQUIRED)
+find_package(argparse CONFIG REQUIRED)
 add_subdirectory(external/narc)
 add_subdirectory(external/embed)
 
@@ -54,6 +55,29 @@ endif()
 configure_file(
     ${CMAKE_SOURCE_DIR}/src/version.h.in
     ${CMAKE_SOURCE_DIR}/src/version.h
+    @ONLY
+)
+
+# Read versions for packages whose CMake configs don't set <pkg>_VERSION
+set(VCPKG_STATUS_FILE "${CMAKE_BINARY_DIR}/vcpkg_installed/vcpkg/status")
+if (EXISTS ${VCPKG_STATUS_FILE})
+    file(READ ${VCPKG_STATUS_FILE} _vcpkg_status)
+    if (_vcpkg_status MATCHES "Package: efsw\nVersion: ([^\n]+)")
+        set(efsw_VERSION "${CMAKE_MATCH_1}")
+    endif()
+endif()
+
+set(NARC_VERSION_FILE "${CMAKE_SOURCE_DIR}/external/narc/.version")
+if (EXISTS ${NARC_VERSION_FILE})
+    file(READ ${NARC_VERSION_FILE} narc_VERSION)
+    string(STRIP ${narc_VERSION} narc_VERSION)
+else()
+    set(narc_VERSION "0.0.0")
+endif()
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/library_versions.h.in
+    ${CMAKE_SOURCE_DIR}/src/library_versions.h
     @ONLY
 )
 

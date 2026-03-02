@@ -575,7 +575,7 @@ void Application::renderMenuBar() {
             if (ImGui::BeginMenu("Open")) {
                 if (ImGui::MenuItemIcon(ICON_FA_FOLDER_OPEN, "Project", KEYBINDSTR(OpenProject), false, AppColors::DarkBeige)) {
                     const auto path = openDirectory();
-                    if (!path.empty()) {
+                    if (!path.empty() && std::filesystem::exists(path)) {
                         addRecentProject(path);
                         g_projectManager->openProject(path);
                     }
@@ -583,7 +583,9 @@ void Application::renderMenuBar() {
 
                 if (ImGui::MenuItemIcon(ICON_FA_FILE, "SPL File", KEYBINDSTR(OpenFile))) {
                     const std::filesystem::path filePath = openFile();
-                    tryOpenEditor(filePath);
+                    if (!filePath.empty() && std::filesystem::exists(filePath)) {
+                        tryOpenEditor(filePath);
+                    }
                 }
 
                 ImGui::EndMenu();
@@ -602,7 +604,7 @@ void Application::renderMenuBar() {
                     }
                 }
 
-                if (!toOpen.empty()) {
+                if (!toOpen.empty() && std::filesystem::exists(toOpen)) {
                     addRecentProject(toOpen);
                     g_projectManager->openProject(toOpen);
                 }
@@ -619,7 +621,7 @@ void Application::renderMenuBar() {
                     }
                 }
 
-                if (!toOpen.empty()) {
+                if (!toOpen.empty() && std::filesystem::exists(toOpen)) {
                     tryOpenEditor(toOpen);
                 }
 
@@ -1093,41 +1095,6 @@ void Application::renderPerformanceWindow() {
     }
 
     ImGui::End();
-}
-
-void Application::renderAboutWindow() {
-    ImGui::PushOverrideID(m_aboutWindowId);
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
-
-    if (ImGui::BeginPopupModal("About NitroEFX", &m_aboutWindowOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
-        const auto windowSize = ImGui::GetWindowSize();
-        if (m_icon) {
-            constexpr auto iconSize = 128.0f;
-            ImGui::SetCursorPosX((windowSize.x - iconSize) * 0.5f);
-            ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
-        }
-
-        ImGui::PushFont(getFont("Large"));
-
-        const auto appStr = fmt::format("NitroEFX {}", Application::VERSION);
-        const auto size = ImGui::CalcTextSize(appStr.c_str());
-        ImGui::SetCursorPosX((windowSize.x - size.x) * 0.5f);
-
-        ImGui::TextUnformatted(appStr.c_str());
-
-        ImGui::PopFont();
-
-        ImGui::Separator();
-        ImGui::Text("A particle editor for the Nintendo DS Pokémon games.");
-        ImGui::Text("Created by Fexty12573");
-        ImGui::TextLinkOpenURL("https://github.com/Fexty12573/nitroefx");
-
-        ImGui::EndPopup();
-    }
-
-    ImGui::PopStyleVar(2);
-    ImGui::PopID();
 }
 
 void Application::renderUpdateWindow() {
@@ -2654,7 +2621,7 @@ std::optional<nlohmann::json> Application::getUpdateAsset(const std::string& tag
     for (const auto& a : assets) {
         const std::string name = a.value("name", "");
         std::string dlUrl = a.value("browser_download_url", "");
-        if (looks(name) && !dlUrl.empty()) return a;
+        if (looks(name) && !dlUrl.empty()) return { a };
     }
 
     return std::nullopt;
