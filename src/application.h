@@ -91,6 +91,7 @@ public:
     static constexpr auto VERSION = NITROEFX_VERSION;
 
 private:
+    void initLogging();
     void pollEvents();
     void handleKeydown(const SDL_Event& event);
     void handleMouseDown(const SDL_Event& event);

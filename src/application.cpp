@@ -18,6 +18,7 @@
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <stb_image.h>
 #include <nlohmann/json.hpp>
 #include <battery/embed.hpp>
@@ -99,6 +100,8 @@ Application::Application() {
 }
 
 int Application::run(int argc, char** argv) {
+    initLogging();
+
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         spdlog::error("SDL_Init Error: {}", SDL_GetError());
         return 1;
@@ -393,6 +396,26 @@ int Application::runCli(argparse::ArgumentParser& parser) {
     }
 
     return 0;
+}
+
+void Application::initLogging() {
+    try {
+        const auto logPath = getConfigPath() / "nitroefx.log";
+        auto logger = spdlog::basic_logger_mt("application", logPath.string(), true);
+        logger->set_level(spdlog::level::debug);
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+
+#ifdef _DEBUG
+        const auto stdoutSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        stdoutSink->set_level(spdlog::level::info);
+        logger->sinks().push_back(stdoutSink);
+#endif
+        
+        spdlog::set_default_logger(logger);
+        spdlog::info("Logging initialized");
+    } catch (const spdlog::spdlog_ex& ex) {
+        fmt::print(stderr, "Log initialization failed: {}\n", ex.what());
+    }
 }
 
 void Application::pollEvents() {
