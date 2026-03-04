@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.h"
+#include <types.h>
 
 #include <glm/glm.hpp>
 #include <SDL3/SDL_events.h>

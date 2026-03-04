@@ -16,7 +16,7 @@
 class EditorInstance {
 public:
     explicit EditorInstance(const std::filesystem::path& path, bool isTemp = false, bool isRecovered = false);
-    explicit EditorInstance(std::string name, size_t narcIndex, std::span<const char> data, bool isTemp = false);
+    explicit EditorInstance(std::string name, size_t narcIndex, std::span<const u8> data, bool isTemp = false);
     EditorInstance(bool isTemp = false);
 
     std::pair<bool, bool> render();

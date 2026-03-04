@@ -38,7 +38,7 @@ EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp, b
     );
 }
 
-EditorInstance::EditorInstance(std::string name, size_t narcIndex, std::span<const char> data, bool isTemp)
+EditorInstance::EditorInstance(std::string name, size_t narcIndex, std::span<const u8> data, bool isTemp)
     : m_narcIndex(narcIndex), m_narcMemberName(std::move(name)), m_archive(data)
     , m_particleSystem(g_application->getEditor()->getSettings().maxParticles, m_archive.getTextures())
     , m_camera(glm::radians(45.0f), {800, 800}, 1.0f, 500.0f), m_isTemp(isTemp) {

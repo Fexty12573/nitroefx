@@ -4,7 +4,7 @@
 #include "editor_settings.h"
 #include "debug_renderer.h"
 #include "grid_renderer.h"
-#include "types.h"
+#include <types.h>
 
 #include <imgui.h>
 #include <nlohmann/json.hpp>

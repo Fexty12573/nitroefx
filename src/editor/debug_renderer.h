@@ -4,7 +4,7 @@
 #include "mesh_generator.h"
 #include "gfx/gl_util.h"
 #include "gfx/gl_shader.h"
-#include "types.h"
+#include <types.h>
 
 #include <glm/glm.hpp>
 #include <vector>

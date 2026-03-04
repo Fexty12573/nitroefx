@@ -9,7 +9,7 @@
 #include <glm/glm.hpp>
 
 #include "spl_behavior.h"
-#include "types.h"
+#include <types.h>
 #include "fx.h"
 #include "gfx/gl_texture.h"
 

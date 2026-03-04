@@ -67,14 +67,6 @@ if (EXISTS ${VCPKG_STATUS_FILE})
     endif()
 endif()
 
-set(NARC_VERSION_FILE "${CMAKE_SOURCE_DIR}/external/narc/.version")
-if (EXISTS ${NARC_VERSION_FILE})
-    file(READ ${NARC_VERSION_FILE} narc_VERSION)
-    string(STRIP ${narc_VERSION} narc_VERSION)
-else()
-    set(narc_VERSION "0.0.0")
-endif()
-
 configure_file(
     ${CMAKE_SOURCE_DIR}/src/library_versions.h.in
     ${CMAKE_SOURCE_DIR}/src/library_versions.h

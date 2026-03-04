@@ -1,13 +1,17 @@
 #pragma once
 
+#include "spl_resource.h"
+#include "util/data_reader.h"
+#include "util/data_writer.h"
+
 #include <concepts>
 #include <filesystem>
 #include <memory>
 #include <string_view>
 #include <vector>
 
-#include "spl_resource.h"
-#include "glm/gtc/constants.hpp"
+#include <glm/gtc/constants.hpp>
+
 
 enum {
     SPA_MAGIC = 0x53504120, // " ASP"
@@ -20,7 +24,7 @@ enum {
 class SPLArchive {
 public:
     explicit SPLArchive(const std::filesystem::path& filename, bool createGpuTextures = true);
-    explicit SPLArchive(std::span<const char> data, bool createGpuTextures = true);
+    explicit SPLArchive(std::span<const u8> data, bool createGpuTextures = true);
     SPLArchive(bool createGpuTextures = true);
 
     static bool isValid(const std::filesystem::path& filename);
@@ -61,8 +65,8 @@ public:
     static constexpr u32 SPL_FRAMES_PER_SECOND = 30;
 
 private:
-    void load(std::istream& stream, bool createGpuTextures);
-    void saveTo(std::ostream& stream);
+    void load(DataReader& r, bool createGpuTextures);
+    void saveTo(DataWriter& w);
     static bool isValid(std::istream& stream);
 
     static SPLResourceHeader fromNative(const SPLResourceHeaderNative& native);

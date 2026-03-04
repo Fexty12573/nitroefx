@@ -2,7 +2,7 @@
 
 #include "spl_resource.h"
 #include "spl_particle.h"
-#include "types.h"
+#include <types.h>
 
 #include <vector>
 

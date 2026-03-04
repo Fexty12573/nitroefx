@@ -6,4 +6,3 @@
 
 #define ARGPARSE_VERSION "@argparse_VERSION@"
 #define EFSW_VERSION "@efsw_VERSION@"
-#define NARC_VERSION "@narc_VERSION@"

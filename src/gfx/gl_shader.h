@@ -8,7 +8,7 @@
 #include <filesystem>
 
 #include "gfx/gl_util.h"
-#include "types.h"
+#include <types.h>
 
 
 class GLShader {

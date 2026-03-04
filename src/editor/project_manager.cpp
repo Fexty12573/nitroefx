@@ -5,6 +5,7 @@
 #include "util/fzy.h"
 #include "util/stream.h"
 #include "util/wsl.h"
+#include "util/fs.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -60,23 +61,6 @@ static uint64_t buildMask(std::string_view sv) {
     }
 
     return mask;
-}
-
-static std::vector<u8> loadFileAsBytes(const fs::path& path) {
-    std::vector<u8> data(fs::file_size(path));
-    std::ifstream file(path, std::ios::in | std::ios::binary);
-    if (file.is_open()) {
-        file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
-    }
-
-    return data;
-}
-
-static void writeBytesToFile(const fs::path& path, std::span<const u8> bytes) {
-    std::ofstream file(path, std::ios::out | std::ios::binary);
-    if (file.is_open()) {
-        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size_bytes()));
-    }
 }
 
 // Because fuckass c++ streams all expect chars
@@ -250,10 +234,10 @@ void ProjectManager::openNarcProject(const fs::path& path) {
                 if (result != PopupResult::Cancel) {
                     if (result == PopupResult::Yes) {
                         saveAllEditors();
-                    }
-
-                    if (m_isNarc) {
-                        saveNarcProject();
+                        
+                        if (m_isNarc) {
+                            saveNarcProject();
+                        }
                     }
 
                     closeProject(true);
@@ -270,7 +254,7 @@ void ProjectManager::openNarcProject(const fs::path& path) {
 
     m_projectPath = path;
 
-    m_narcData = helpers::loadFileAsBytes(path);
+    m_narcData = FSUtil::readToBytes(path);
     const int err = nitroarc_read(m_narcData.data(), static_cast<u32>(m_narcData.size()), &m_narc);
     if (err != 0) {
         spdlog::error("Failed to load NARC archive: {} (error: {})", path.string(), nitroarc_errs(err));
@@ -475,7 +459,7 @@ void ProjectManager::saveNarcProject() {
         return;
     }
 
-    helpers::writeBytesToFile(m_projectPath, { static_cast<const u8*>(data), size });
+    FSUtil::writeBytes(m_projectPath, { static_cast<const u8*>(data), size });
     packer.free(nullptr, data, 1, size);
 }
 
@@ -507,7 +491,7 @@ void ProjectManager::openEditor(size_t narcIndex) {
     const auto editor = std::make_shared<EditorInstance>(
         entry.name,
         narcIndex,
-        helpers::spanCast<const char>(entry.getData()),
+        entry.getData(),
         false
     );
 
@@ -535,7 +519,7 @@ void ProjectManager::openTempEditor(size_t narcIndex) {
     const auto editor = std::make_shared<EditorInstance>(
         entry.name,
         narcIndex,
-        helpers::spanCast<const char>(entry.getData()),
+        entry.getData(),
         true
     );
     m_openEditors.push_back(editor);
