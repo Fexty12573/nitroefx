@@ -21,6 +21,7 @@
 #include <string_view>
 #include <utility>
 #include <optional>
+#include <regex>
 #include <cstdio>
 
 #include "application_colors.h"
@@ -255,7 +256,7 @@ void ProjectManager::openNarcProject(const fs::path& path) {
     m_projectPath = path;
 
     m_narcData = FSUtil::readToBytes(path);
-    const int err = nitroarc_read(m_narcData.data(), static_cast<u32>(m_narcData.size()), &m_narc);
+    int err = nitroarc_read(m_narcData.data(), static_cast<u32>(m_narcData.size()), &m_narc);
     if (err != 0) {
         spdlog::error("Failed to load NARC archive: {} (error: {})", path.string(), nitroarc_errs(err));
         return;
@@ -267,7 +268,7 @@ void ProjectManager::openNarcProject(const fs::path& path) {
     for (u16 i = 0; i < m_narc.nfiles; i++) {
         NarcEntry e{};
         nitroarc_nameof(&m_narc, i, name, sizeof(name));
-        const int err = nitroarc_geti(&m_narc, i, &data, &dataSize);
+        err = nitroarc_geti(&m_narc, i, &data, &dataSize);
         if (err != 0) {
             spdlog::error("Failed to get data for NARC file {} (error: {})", i, nitroarc_errs(err));
             e.data = std::vector<u8>{};
@@ -276,9 +277,14 @@ void ProjectManager::openNarcProject(const fs::path& path) {
         }
 
         if (name[0] != '\0') {
-            e.name = name;
+            e.name = name + 1; // +1 because nitroarc puts a '/' at the start of the name
+
+            // Strip index prefix (from previous times it was loaded in nitroefx) if present
+            if (std::regex_search(e.name, NARC_MEMBER_PREFIX_PATTERN)) {
+                e.name = e.name.substr(6);
+            }
         } else {
-            e.name = fmt::format("file_{}", i);
+            e.name = fmt::format("file_{:03}", i);
         }
 
         m_narcEntries.push_back(e);
@@ -436,13 +442,19 @@ void ProjectManager::saveNarcProject() {
         return;
     }
 
-    for (auto& entry : m_narcEntries) {
+    // Storing all names in a vector temporarily because nitroarc_ppack doesn't copy the strings
+    std::vector<std::string> memberNames(anyNamed ? m_narcEntries.size() : 0);
+    for (const auto [i, entry] : m_narcEntries | std::views::enumerate) {
+        if (anyNamed) {
+            memberNames[i] = fmt::format(NARC_MEMBER_PREFIX_FORMAT, i, entry.name);
+        }
+
         auto data = entry.getData();
         err = nitroarc_ppack(
             &packer,
             data.data(),
             static_cast<u32>(data.size()),
-            anyNamed ? entry.name.data() : nullptr
+            anyNamed ? memberNames[i].data() : nullptr
         );
 
         if (err != 0) {
@@ -670,7 +682,7 @@ void ProjectManager::renderFile(const fs::path& path) {
         if (ImGui::MenuItemIcon(ICON_FA_PEN_TO_SQUARE, "Rename")) {
             m_inlineMode = InlineEditMode::RenameFile;
             m_inlineEditPathOld = path;
-            (void)std::snprintf(m_inlineEditBuffer, IM_ARRAYSIZE(m_inlineEditBuffer), "%s", path.filename().string().c_str());
+            (void)std::snprintf(m_inlineEditBuffer, sizeof(m_inlineEditBuffer), "%s", path.filename().string().c_str());
             m_inlineEditFocusRequested = true;
         }
 
@@ -767,7 +779,7 @@ void ProjectManager::renderNarcFile(NarcEntry& entry, size_t index) {
             m_inlineMode = InlineEditMode::RenameFile;
             m_inlineEditIndex = index;
             m_inlineEditFocusRequested = true;
-            ImStrncpy(m_inlineEditBuffer, entry.name.c_str(), entry.name.size());
+            (void)std::snprintf(m_inlineEditBuffer, sizeof(m_inlineEditBuffer), "%s", entry.name.c_str());
         }
 
         ImGui::BeginDisabled();

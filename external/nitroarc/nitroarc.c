@@ -258,7 +258,7 @@ int nitroarc_nameof(const nitroarc_t *narc, uint16_t i, char *buf, size_t size) 
     assert(buf);
     assert(size);
 
-    if (narc->ndirs == 1) {
+    if (narc->fntb.size == FNTB_HEADERSIZE + FNTB_DIRTAB_ENTRYSIZE) {
         *buf = 0;
         return NITROARC_ESUCCESS;
     }

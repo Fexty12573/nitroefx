@@ -19,6 +19,7 @@
 #include <thread>
 #include <fstream>
 #include <variant>
+#include <regex>
 
 class Editor;
 
@@ -322,6 +323,8 @@ private:
 
     static constexpr uint32_t INDEX_MAGIC = 0x20584449; // "IDX "
     static constexpr uint32_t INDEX_VERSION = 1;
+    static constexpr auto NARC_MEMBER_PREFIX_FORMAT = "${:04}_{}";
+    static inline const auto NARC_MEMBER_PREFIX_PATTERN = std::regex("^\\$\\d{4}_");
 
     struct IndexHeader {
         uint32_t magic;
