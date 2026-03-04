@@ -2,6 +2,7 @@
 #include "gfx/gl_util.h"
 #include "enum_names.h"
 #include "util/stream.h"
+#include "util/data_writer.h"
 
 #include <spdlog/spdlog.h>
 #include <fmt/printf.h>
@@ -261,26 +262,14 @@ void SPLArchive::load(std::istream& stream, bool createGpuTextures) {
     }
 }
 
-bool SPLArchive::isValid(std::istream& stream) {
-    decltype(SPA_MAGIC) magic;
-    stream >> magic;
-    return magic == SPA_MAGIC;
-}
-
-void SPLArchive::save(const std::filesystem::path& filename) {
-    std::ofstream file(filename, std::ios::binary | std::ios::out);
-    if (!file) {
-        spdlog::error("Failed to open file for writing: {}", filename.string());
-        return;
-    }
-
+void SPLArchive::saveTo(std::ostream& stream) {
     m_header.resCount = (u16)m_resources.size();
     m_header.texCount = (u16)m_textures.size();
     // resSize and texSize are set after writing them
 
-    file << m_header;
+    stream << m_header;
 
-    const auto resPos = file.tellp();
+    const auto resPos = stream.tellp();
 
     for (auto& res : m_resources) {
         res.header.flags.hasScaleAnim = res.scaleAnim.has_value();
@@ -295,56 +284,56 @@ void SPLArchive::save(const std::filesystem::path& filename) {
         res.header.flags.hasCollisionPlaneBehavior = res.hasBehavior(SPLBehaviorType::CollisionPlane);
         res.header.flags.hasConvergenceBehavior = res.hasBehavior(SPLBehaviorType::Convergence);
 
-        file << toNative(res.header);
+        stream << toNative(res.header);
 
         const auto& flags = res.header.flags;
         if (flags.hasScaleAnim) {
-            file << toNative(*res.scaleAnim);
+            stream << toNative(*res.scaleAnim);
         }
 
         if (flags.hasColorAnim) {
-            file << toNative(*res.colorAnim);
+            stream << toNative(*res.colorAnim);
         }
 
         if (flags.hasAlphaAnim) {
-            file << toNative(*res.alphaAnim);
+            stream << toNative(*res.alphaAnim);
         }
 
         if (flags.hasTexAnim) {
-            file << toNative(*res.texAnim);
+            stream << toNative(*res.texAnim);
         }
 
         if (flags.hasChildResource) {
-            file << toNative(*res.childResource);
+            stream << toNative(*res.childResource);
         }
 
 
         if (flags.hasGravityBehavior) {
-            file << toNative(*res.getBehavior<SPLGravityBehavior>(SPLBehaviorType::Gravity));
+            stream << toNative(*res.getBehavior<SPLGravityBehavior>(SPLBehaviorType::Gravity));
         }
 
         if (flags.hasRandomBehavior) {
-            file << toNative(*res.getBehavior<SPLRandomBehavior>(SPLBehaviorType::Random));
+            stream << toNative(*res.getBehavior<SPLRandomBehavior>(SPLBehaviorType::Random));
         }
 
         if (flags.hasMagnetBehavior) {
-            file << toNative(*res.getBehavior<SPLMagnetBehavior>(SPLBehaviorType::Magnet));
+            stream << toNative(*res.getBehavior<SPLMagnetBehavior>(SPLBehaviorType::Magnet));
         }
 
         if (flags.hasSpinBehavior) {
-            file << toNative(*res.getBehavior<SPLSpinBehavior>(SPLBehaviorType::Spin));
+            stream << toNative(*res.getBehavior<SPLSpinBehavior>(SPLBehaviorType::Spin));
         }
 
         if (flags.hasCollisionPlaneBehavior) {
-            file << toNative(*res.getBehavior<SPLCollisionPlaneBehavior>(SPLBehaviorType::CollisionPlane));
+            stream << toNative(*res.getBehavior<SPLCollisionPlaneBehavior>(SPLBehaviorType::CollisionPlane));
         }
 
         if (flags.hasConvergenceBehavior) {
-            file << toNative(*res.getBehavior<SPLConvergenceBehavior>(SPLBehaviorType::Convergence));
+            stream << toNative(*res.getBehavior<SPLConvergenceBehavior>(SPLBehaviorType::Convergence));
         }
     }
 
-    const auto texPos = file.tellp();
+    const auto texPos = stream.tellp();
     const auto resSize = texPos - resPos;
 
     for (auto& tex : m_textures) {
@@ -357,19 +346,40 @@ void SPLArchive::save(const std::filesystem::path& filename) {
         texRes.unused0 = texRes.unused1 = 0;
         texRes.resourceSize = sizeof(SPLTextureResource) + texRes.textureSize + texRes.paletteSize;
 
-        file << texRes;
-        file.write((char*)tex.textureData.data(), texRes.textureSize);
-        file.write((char*)tex.paletteData.data(), texRes.paletteSize);
+        stream << texRes;
+        stream.write((char*)tex.textureData.data(), texRes.textureSize);
+        stream.write((char*)tex.paletteData.data(), texRes.paletteSize);
     }
 
-    const auto texSize = file.tellp() - texPos;
+    const auto texSize = stream.tellp() - texPos;
 
     m_header.resSize = (u32)resSize;
     m_header.texSize = (u32)texSize;
     m_header.texOffset = (u32)texPos;
 
-    file.seekp(0, std::ios::beg);
-    file << m_header;
+    stream.seekp(0, std::ios::beg);
+    stream << m_header;
+}
+
+bool SPLArchive::isValid(std::istream& stream) {
+    decltype(SPA_MAGIC) magic;
+    stream >> magic;
+    return magic == SPA_MAGIC;
+}
+
+void SPLArchive::save(const std::filesystem::path& filename) {
+    std::ofstream file(filename, std::ios::binary | std::ios::out);
+    if (!file) {
+        spdlog::error("Failed to open file for writing: {}", filename.string());
+        return;
+    }
+
+    saveTo(file);
+}
+
+void SPLArchive::save(std::vector<u8>& data) {
+    VectorOStream out{ data };
+    saveTo(out);
 }
 
 void SPLArchive::exportTextures(const std::filesystem::path& directory, const std::filesystem::path& backupDir) const {

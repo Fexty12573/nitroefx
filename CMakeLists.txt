@@ -24,7 +24,6 @@ find_package(minizip-ng CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(argparse CONFIG REQUIRED)
-add_subdirectory(external/narc)
 add_subdirectory(external/embed)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
@@ -32,6 +31,7 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
 set(EXTERNAL_SOURCES 
     external/tinyfiledialogs/tinyfiledialogs.c
     external/microtar/src/microtar.c
+    external/nitroarc/nitroarc.c
 )
 
 add_executable(nitroefx ${SOURCES} ${EXTERNAL_SOURCES})
@@ -110,7 +110,8 @@ target_include_directories(nitroefx PRIVATE
     external/tinyfiledialogs
     external/microtar/src
     external/stb
-    external/libimagequant/imagequant-sys)
+    external/libimagequant/imagequant-sys
+    external/nitroarc)
 target_compile_definitions(nitroefx PRIVATE 
     GLM_ENABLE_EXPERIMENTAL
     IMGUI_DEFINE_MATH_OPERATORS)
@@ -124,7 +125,6 @@ target_link_libraries(nitroefx PRIVATE
     GLEW::GLEW
     implot::implot
     spng::spng_static
-    libnarc_static
     CURL::libcurl_static
     ZLIB::ZLIB
     MINIZIP::minizip-ng

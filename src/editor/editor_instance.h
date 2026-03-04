@@ -16,7 +16,7 @@
 class EditorInstance {
 public:
     explicit EditorInstance(const std::filesystem::path& path, bool isTemp = false, bool isRecovered = false);
-    explicit EditorInstance(size_t narcIndex, std::span<const char> data, bool isTemp = false);
+    explicit EditorInstance(std::string name, size_t narcIndex, std::span<const char> data, bool isTemp = false);
     EditorInstance(bool isTemp = false);
 
     std::pair<bool, bool> render();
@@ -50,6 +50,10 @@ public:
         return m_isRecovered;
     }
 
+    bool isNarc() const {
+        return m_narcIndex != std::numeric_limits<size_t>::max();
+    }
+
     void duplicateResource(size_t index);
     void deleteResource(size_t index);
     void addResource();
@@ -79,6 +83,12 @@ public:
 
     void rename(const std::filesystem::path& to) {
         m_path = to;
+    }
+
+    void rename(const std::string& to) {
+        if (isNarc()) {
+            m_narcMemberName = to;
+        }
     }
 
     const std::filesystem::path& getPath() const {
@@ -118,6 +128,7 @@ public:
 private:
     std::filesystem::path m_path;
     size_t m_narcIndex = -1;
+    std::string m_narcMemberName;
     SPLArchive m_archive;
     GLViewport m_viewport = GLViewport({ 800, 600 });
     ParticleSystem m_particleSystem;

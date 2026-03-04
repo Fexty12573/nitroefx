@@ -10,6 +10,7 @@
 #include <libimagequant.h>
 #include <microtar.h>
 #include <minizip-ng/mz.h>
+#include <nitroarc.h>
 #include <nlohmann/json.hpp>
 #include <SDL3/SDL_version.h>
 #include <spdlog/version.h>
@@ -61,7 +62,7 @@ void Application::renderAboutWindow() {
             ImGui::BulletText("libspng - v%d.%d.%d", SPNG_VERSION_MAJOR, SPNG_VERSION_MINOR, SPNG_VERSION_PATCH);
             ImGui::BulletText("microtar - v%s", MTAR_VERSION);
             ImGui::BulletText("minizip-ng - v%s", MZ_VERSION);
-            ImGui::BulletText("narc - v%s", NARC_VERSION);
+            ImGui::BulletText("nitroarc - v%d.%d.%d", NITROARC_VERSION_MAJOR, NITROARC_VERSION_MINOR, NITROARC_VERSION_PATCH);
             ImGui::BulletText("nlohmann/json - v%d.%d.%d", NLOHMANN_JSON_VERSION_MAJOR, NLOHMANN_JSON_VERSION_MINOR, NLOHMANN_JSON_VERSION_PATCH);
             ImGui::BulletText("SDL3 - v%d.%d.%d", SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_MICRO_VERSION);
             ImGui::BulletText("spdlog - v%d.%d.%d", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR, SPDLOG_VER_PATCH);

@@ -3,8 +3,7 @@
 #include "editor_instance.h"
 
 #include <SDL3/SDL_events.h>
-#include <narc/narc.h>
-#include <narc/defs/fatb.h>
+#include <nitroarc.h>
 #include <efsw/efsw.hpp>
 
 #include <algorithm>
@@ -19,6 +18,7 @@
 #include <mutex>
 #include <thread>
 #include <fstream>
+#include <variant>
 
 class Editor;
 
@@ -36,6 +36,7 @@ public:
     void closeTempEditor();
     void closeAllEditors();
     void saveAllEditors() const;
+    void saveAllNarcEditors() const;
 
     bool hasEditor(const std::filesystem::path& path) const {
         return std::ranges::any_of(m_openEditors, [&path](const auto& editor) {
@@ -90,6 +91,10 @@ public:
         return !m_projectPath.empty();
     }
 
+    bool hasNarcProject() const {
+        return m_isNarc;
+    }
+
     bool hasOpenEditors() const {
         return !m_openEditors.empty();
     }
@@ -131,13 +136,19 @@ public:
         m_fuzzyQueryDirty = true;
     }
 
+    void saveNarcProject();
+
+    void updateNarcMember(size_t index, const std::vector<u8>& data);
+
 private:
+    struct NarcEntry;
+
     void openEditor(size_t narcIndex);
     void openTempEditor(size_t narcIndex);
 
     void renderDirectory(const std::filesystem::path& path);
     void renderFile(const std::filesystem::path& path);
-    void renderNarcFile(const std::string& name, size_t index);
+    void renderNarcFile(NarcEntry& entry, size_t index);
 
     void cancelInlineEdit();
 
@@ -229,17 +240,43 @@ private:
         double score;
     };
 
+    struct NarcEntry {
+        std::string name;
+        std::variant<std::span<u8>, std::vector<u8>> data;
+
+        std::span<const u8> getData() const {
+            if (std::holds_alternative<std::span<u8>>(data)) {
+                return std::get<std::span<u8>>(data);
+            }
+
+            return std::get<std::vector<u8>>(data);
+        }
+
+        std::span<u8> getData() {
+            if (std::holds_alternative<std::span<u8>>(data)) {
+                return std::get<std::span<u8>>(data);
+            }
+
+            return std::get<std::vector<u8>>(data);
+        }
+
+        bool isModified() const {
+            return std::holds_alternative<std::vector<u8>>(data);
+        }
+    };
+
     friend class FileWatchListener;
 
 private:
     Editor* m_mainEditor;
     std::filesystem::path m_projectPath;
     bool m_isNarc = false;
-    narc* m_narc = nullptr;
-    vfs_ctx m_vfsCtx;
-    fatb_meta* m_fatbMeta = nullptr;
-    fatb_entry* m_fatb = nullptr;
-    char* m_fimg = nullptr;
+    bool m_narcModified = false;
+
+    // NARC data
+    nitroarc_t m_narc;
+    std::vector<u8> m_narcData;
+    std::vector<NarcEntry> m_narcEntries;
 
     // Recursive directory cache
     std::unique_ptr<efsw::FileWatcher> m_watcher;
@@ -263,6 +300,7 @@ private:
     InlineEditMode m_inlineMode = InlineEditMode::None;
     std::filesystem::path m_inlineEditPathOld;
     std::filesystem::path m_inlineEditTargetDir;
+    size_t m_inlineEditIndex = -1;
     char m_inlineEditBuffer[256] = {};
     bool m_inlineEditFocusRequested = false;
 

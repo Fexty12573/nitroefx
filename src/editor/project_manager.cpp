@@ -4,26 +4,25 @@
 #include "fonts/IconsFontAwesome6.h"
 #include "util/fzy.h"
 #include "util/stream.h"
+#include "util/wsl.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 #include <SDL3/SDL_messagebox.h>
 #include <spdlog/spdlog.h>
-#include <narc/narc.h>
-#include <narc/defs/fimg.h>
 
+#include <cstring>
 #include <numeric>
 #include <queue>
-#include <numeric>
 #include <cctype>
 #include <limits>
 #include <string_view>
-#include <charconv>
 #include <utility>
 #include <optional>
 #include <cstdio>
-#include "util/wsl.h"
+
+#include "application_colors.h"
 
 
 namespace fs = std::filesystem;
@@ -63,6 +62,29 @@ static uint64_t buildMask(std::string_view sv) {
     return mask;
 }
 
+static std::vector<u8> loadFileAsBytes(const fs::path& path) {
+    std::vector<u8> data(fs::file_size(path));
+    std::ifstream file(path, std::ios::in | std::ios::binary);
+    if (file.is_open()) {
+        file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    }
+
+    return data;
+}
+
+static void writeBytesToFile(const fs::path& path, std::span<const u8> bytes) {
+    std::ofstream file(path, std::ios::out | std::ios::binary);
+    if (file.is_open()) {
+        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size_bytes()));
+    }
+}
+
+// Because fuckass c++ streams all expect chars
+template<typename To, typename From>
+static std::span<To> spanCast(std::span<From> span) requires (sizeof(To) == sizeof(From)) {
+    return std::span<To>(reinterpret_cast<To*>(span.data()), span.size());
+}
+
 }
 
 void ProjectManager::init(Editor* editor) {
@@ -73,25 +95,30 @@ void ProjectManager::init(Editor* editor) {
 
 void ProjectManager::openProject(const fs::path& path) {
     if (hasProject()) {
-        constexpr SDL_MessageBoxButtonData buttons[] = {
-            { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No" },
-            { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes" }
-        };
-        const SDL_MessageBoxData data = {
-            SDL_MESSAGEBOX_INFORMATION,
-            nullptr,
-            "Close project?",
-            "You already have a project open. Do you want to close it?",
-            2,
-            buttons,
-            nullptr
-        };
+        if (!m_unsavedEditors.empty() || m_narcModified) {
+            g_application->showPopup(
+                "Unsaved Changes",
+                "You still have unsaved changes. Do you want to save them?",
+                PopupType::YesNoCancel,
+                [this, path](auto result) {
+                    if (result != PopupResult::Cancel) {
+                        if (result == PopupResult::Yes) {
+                            saveAllEditors();
+                        }
 
-        int button = 0;
-        if (!SDL_ShowMessageBox(&data, &button) || button == 0) {
+                        if (m_isNarc) {
+                            saveNarcProject();
+                        }
+
+                        closeProject(true);
+                        openProject(path);
+                    }
+                }
+            );
+
             return;
         }
-
+        
         closeProject(true);
     }
 
@@ -148,6 +175,11 @@ void ProjectManager::closeProject(bool force) {
         m_fuzzyIndexBuilt = false;
         m_fuzzyIndexBuilding = false;
         m_fuzzyOpen = false;
+
+        m_narcEntries.clear();
+        m_narcData.clear();
+        m_isNarc = false;
+        m_narcModified = false;
     }
 }
 
@@ -208,15 +240,65 @@ void ProjectManager::openTempEditor(const fs::path& path) {
 }
 
 void ProjectManager::openNarcProject(const fs::path& path) {
-    narc_error err = narc_load(path.string().c_str(), &m_narc, &m_vfsCtx);
-    if (err != NARCERR_NONE) {
-        spdlog::error("Failed to load NARC archive: {} (error: {})", path.string(), narc_strerror(err));
+    if (hasProject()) {
+        if (!m_unsavedEditors.empty() || m_narcModified) {
+            g_application->showPopup(
+                "Unsaved Changes",
+                "You still have unsaved changes. Do you want to save them?",
+                PopupType::YesNoCancel,
+                [this, path](auto result) {
+                if (result != PopupResult::Cancel) {
+                    if (result == PopupResult::Yes) {
+                        saveAllEditors();
+                    }
+
+                    if (m_isNarc) {
+                        saveNarcProject();
+                    }
+
+                    closeProject(true);
+                    openNarcProject(path);
+                }
+            }
+            );
+
+            return;
+        }
+        
+        closeProject(true);
+    }
+
+    m_projectPath = path;
+
+    m_narcData = helpers::loadFileAsBytes(path);
+    const int err = nitroarc_read(m_narcData.data(), static_cast<u32>(m_narcData.size()), &m_narc);
+    if (err != 0) {
+        spdlog::error("Failed to load NARC archive: {} (error: {})", path.string(), nitroarc_errs(err));
         return;
     }
 
-    m_fatbMeta = (fatb_meta*)(m_narc->vfs + m_vfsCtx.fatb_ofs);
-    m_fatb = (fatb_entry*)(m_narc->vfs + m_vfsCtx.fatb_ofs + sizeof(*m_fatbMeta));
-    m_fimg = (char*)(m_narc->vfs + m_vfsCtx.fimg_ofs + sizeof(fimg_meta));
+    char name[256];
+    void* data;
+    uint32_t dataSize;
+    for (u16 i = 0; i < m_narc.nfiles; i++) {
+        NarcEntry e{};
+        nitroarc_nameof(&m_narc, i, name, sizeof(name));
+        const int err = nitroarc_geti(&m_narc, i, &data, &dataSize);
+        if (err != 0) {
+            spdlog::error("Failed to get data for NARC file {} (error: {})", i, nitroarc_errs(err));
+            e.data = std::vector<u8>{};
+        } else {
+            e.data = std::span(static_cast<u8*>(data), dataSize);
+        }
+
+        if (name[0] != '\0') {
+            e.name = name;
+        } else {
+            e.name = fmt::format("file_{}", i);
+        }
+
+        m_narcEntries.push_back(e);
+    }
 
     m_isNarc = true;
 }
@@ -259,6 +341,14 @@ void ProjectManager::saveAllEditors() const {
     }
 }
 
+void ProjectManager::saveAllNarcEditors() const {
+    for (const auto& editor : m_openEditors) {
+        if (editor->isNarc()) {
+            editor->save();
+        }
+    }
+}
+
 void ProjectManager::open() {
     m_open = true;
 }
@@ -269,7 +359,7 @@ void ProjectManager::render() {
     }
 
     if (ImGui::Begin("Project Manager##ProjectManager", &m_open)) {
-        if (m_projectPath.empty() && !m_narc) {
+        if (m_projectPath.empty() && m_narc.size == 0) {
             ImGui::Text("No project open");
         } else {
             if (ImGui::CollapsingHeader("Settings")) {
@@ -280,17 +370,16 @@ void ProjectManager::render() {
                 }
             }
             
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint("##Filter", "Search by name...", &m_searchString);
+            if (!m_isNarc) {
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputTextWithHint("##Filter", "Search by name...", &m_searchString);
+            }
 
             ImGui::BeginChild("##ProjectManagerFiles", {}, ImGuiChildFlags_Border);
 
             if (m_isNarc) {
-                for (size_t i = 0; i < m_fatbMeta->num_files; i++) {
-                    const auto name = fmt::format("{}{}", i, narc_files_getext(m_fimg + m_fatb[i].start));
-                    if (m_searchString.empty() || name.contains(m_searchString)) {
-                        renderNarcFile(name, i);
-                    }
+                for (size_t i = 0; i < m_narc.nfiles; i++) {
+                    renderNarcFile(m_narcEntries[i], i);
                 }
             } else {
                 ensureDirectoryCached(m_projectPath);
@@ -336,6 +425,70 @@ void ProjectManager::handleEvent(const SDL_Event& event) {
     }
 }
 
+void ProjectManager::saveNarcProject() {
+    if (!m_isNarc) {
+        return;
+    }
+
+    const bool anyNamed = std::ranges::any_of(
+        m_narcEntries | std::views::enumerate,
+        [](const auto& e) -> bool {
+            if (std::get<1>(e).name != fmt::format("file_{}", std::get<0>(e))) {
+                return true;
+            }
+
+            return false;
+        }
+    );
+
+    nitroarc_packer_t packer;
+    packer.malloc = [](auto, auto items, auto size) { return malloc(items * size); };
+    packer.realloc = [](auto, auto ptr, auto items, auto size) { return realloc(ptr, items * size); };
+    packer.free = [](auto, auto ptr, auto, auto) { free(ptr); };
+
+    int err = nitroarc_pinit(&packer, static_cast<u16>(m_narcEntries.size()), anyNamed, false);
+    if (err != 0) {
+        spdlog::error("Failed to save NARC: {}", nitroarc_errs(err));
+        return;
+    }
+
+    for (auto& entry : m_narcEntries) {
+        auto data = entry.getData();
+        err = nitroarc_ppack(
+            &packer,
+            data.data(),
+            static_cast<u32>(data.size()),
+            anyNamed ? entry.name.data() : nullptr
+        );
+
+        if (err != 0) {
+            spdlog::error("Failed to save NARC: {}", nitroarc_errs(err));
+            return;
+        }
+    }
+
+    void* data = nullptr;
+    u32 size = 0;
+    err = nitroarc_pseal(&packer, &data, &size);
+    if (err != 0) {
+        spdlog::error("Failed to save NARC: {}", nitroarc_errs(err));
+        return;
+    }
+
+    helpers::writeBytesToFile(m_projectPath, { static_cast<const u8*>(data), size });
+    packer.free(nullptr, data, 1, size);
+}
+
+void ProjectManager::updateNarcMember(size_t index, const std::vector<u8>& data) {
+    if (index >= m_narcEntries.size()) {
+        spdlog::error("NARC index out of range: {}", index);
+        return;
+    }
+
+    m_narcEntries[index].data = data;
+    m_narcModified = true;
+}
+
 void ProjectManager::openEditor(size_t narcIndex) {
     const auto existing = getNarcEditor(narcIndex);
     if (existing) {
@@ -345,9 +498,18 @@ void ProjectManager::openEditor(size_t narcIndex) {
         return;
     }
 
-    const auto& fatb = m_fatb[narcIndex];
-    const std::span data(m_fimg + fatb.start, fatb.end - fatb.start);
-    const auto editor = std::make_shared<EditorInstance>(narcIndex, data);
+    if (narcIndex >= m_narcEntries.size()) {
+        spdlog::error("Narc index out of bounds: {}", narcIndex);
+        return;
+    }
+
+    const auto& entry = m_narcEntries[narcIndex];
+    const auto editor = std::make_shared<EditorInstance>(
+        entry.name,
+        narcIndex,
+        helpers::spanCast<const char>(entry.getData()),
+        false
+    );
 
     m_activeEditor = editor;
     m_openEditors.push_back(editor);
@@ -362,11 +524,20 @@ void ProjectManager::openTempEditor(size_t narcIndex) {
         return;
     }
 
-    const auto& fatb = m_fatb[narcIndex];
-    const std::span data(m_fimg + fatb.start, fatb.end - fatb.start);
+    if (narcIndex >= m_narcEntries.size()) {
+        spdlog::error("Narc index out of bounds: {}", narcIndex);
+        return;
+    }
+
+    const auto& entry = m_narcEntries[narcIndex];
     closeTempEditor();
 
-    const auto editor = std::make_shared<EditorInstance>(narcIndex, data, true);
+    const auto editor = std::make_shared<EditorInstance>(
+        entry.name,
+        narcIndex,
+        helpers::spanCast<const char>(entry.getData()),
+        true
+    );
     m_openEditors.push_back(editor);
     m_activeEditor = editor;
 }
@@ -530,15 +701,15 @@ void ProjectManager::renderFile(const fs::path& path) {
     }
 }
 
-void ProjectManager::renderNarcFile(const std::string& name, size_t index) {
-    if (index >= m_fatbMeta->num_files) {
+void ProjectManager::renderNarcFile(NarcEntry& entry, size_t index) {
+    if (index >= m_narc.nfiles) {
         spdlog::error("Invalid NARC file index: {}", index);
         return;
     }
 
-    const auto& fatb = m_fatb[index];
-    const char* data = m_fimg + fatb.start;
-    const auto isSplFile = SPLArchive::isValid(std::span(data, fatb.end - fatb.start));
+    const auto isSplFile = SPLArchive::isValid(
+        helpers::spanCast<char>(entry.getData())
+    );
 
     if (!isSplFile) {
         if (m_hideOtherFiles) {
@@ -549,11 +720,51 @@ void ProjectManager::renderNarcFile(const std::string& name, size_t index) {
     }
 
     ImGui::Indent(40.0f);
-    if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-            openEditor(index);
-        } else {
-            openTempEditor(index);
+
+    const bool isRenamingThis = (m_inlineMode == InlineEditMode::RenameFile && m_inlineEditIndex == index);
+    if (isRenamingThis) {
+        ImGui::PushItemWidth(-1);
+
+        if (m_inlineEditFocusRequested) {
+            ImGui::SetKeyboardFocusHere();
+            m_inlineEditFocusRequested = false;
+        }
+
+        constexpr auto inputTextFlags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+        if (ImGui::InputText("##rename", m_inlineEditBuffer, IM_ARRAYSIZE(m_inlineEditBuffer), inputTextFlags)) {
+            if (m_inlineEditBuffer[0] != '\0') {
+                entry.name = m_inlineEditBuffer;
+                m_narcModified = true;
+                if (const auto editor = getNarcEditor(index)) {
+                    editor->rename(entry.name);
+                }
+            }
+
+            cancelInlineEdit();
+        }
+
+        const bool deactivated = ImGui::IsItemDeactivated();
+        if (deactivated && (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Left))) {
+            cancelInlineEdit();
+        }
+
+        ImGui::PopItemWidth();
+    } else {
+        if (entry.isModified()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, AppColors::PastelYellow);
+        }
+
+        const bool selected = m_activeEditor ? m_activeEditor->getNarcIndex() == index : false;
+        if (ImGui::Selectable(entry.name.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                openEditor(index);
+            } else {
+                openTempEditor(index);
+            }
+        }
+
+        if (entry.isModified()) {
+            ImGui::PopStyleColor();
         }
     }
     ImGui::Unindent(40.0f);
@@ -568,9 +779,18 @@ void ProjectManager::renderNarcFile(const std::string& name, size_t index) {
             openEditor(index);
         }
 
+        if (ImGui::MenuItemIcon(ICON_FA_PEN_TO_SQUARE, "Rename")) {
+            m_inlineMode = InlineEditMode::RenameFile;
+            m_inlineEditIndex = index;
+            m_inlineEditFocusRequested = true;
+            ImStrncpy(m_inlineEditBuffer, entry.name.c_str(), entry.name.size());
+        }
+
+        ImGui::BeginDisabled();
         if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, 0, false)) {
             spdlog::warn("Deleting NARC files not supported");
         }
+        ImGui::EndDisabled();
 
         ImGui::EndPopup();
     }
@@ -580,6 +800,7 @@ void ProjectManager::cancelInlineEdit() {
     m_inlineMode = InlineEditMode::None;
     m_inlineEditPathOld.clear();
     m_inlineEditTargetDir.clear();
+    m_inlineEditIndex = -1;
     m_inlineEditBuffer[0] = '\0';
     m_inlineEditFocusRequested = false;
 }

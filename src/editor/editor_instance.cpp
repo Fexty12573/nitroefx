@@ -38,8 +38,8 @@ EditorInstance::EditorInstance(const std::filesystem::path& path, bool isTemp, b
     );
 }
 
-EditorInstance::EditorInstance(size_t narcIndex, std::span<const char> data, bool isTemp)
-    : m_narcIndex(narcIndex), m_archive(data)
+EditorInstance::EditorInstance(std::string name, size_t narcIndex, std::span<const char> data, bool isTemp)
+    : m_narcIndex(narcIndex), m_narcMemberName(std::move(name)), m_archive(data)
     , m_particleSystem(g_application->getEditor()->getSettings().maxParticles, m_archive.getTextures())
     , m_camera(glm::radians(45.0f), {800, 800}, 1.0f, 500.0f), m_isTemp(isTemp) {
 
@@ -291,8 +291,12 @@ void EditorInstance::addResource() {
 }
 
 void EditorInstance::save() {
-    if (m_narcIndex != -1) {
-        spdlog::error("Saving NARC editors not supported yet");
+    if (m_narcIndex != std::numeric_limits<size_t>::max()) {
+        std::vector<u8> serialized;
+        m_archive.save(serialized);
+        g_projectManager->updateNarcMember(m_narcIndex, serialized);
+        m_modified = false;
+        m_isRecovered = false;
         return;
     }
 
@@ -375,8 +379,8 @@ EditorActionType EditorInstance::redo() {
 }
 
 std::filesystem::path EditorInstance::getRelativePath() const {
-    if (m_narcIndex != -1) {
-        return fmt::format("N{:05d}.spa", m_narcIndex);
+    if (m_narcIndex != std::numeric_limits<size_t>::max()) {
+        return m_narcMemberName;
     }
 
     if (m_path.empty()) {
@@ -396,8 +400,8 @@ std::filesystem::path EditorInstance::getBackupPath() const {
 }
 
 std::string EditorInstance::getName() const {
-    if (m_narcIndex != -1) {
-        return fmt::format("N{:05d}.spa", m_narcIndex);
+    if (m_narcIndex != std::numeric_limits<size_t>::max()) {
+        return m_narcMemberName;
     }
 
     if (m_path.empty()) {

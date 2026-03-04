@@ -50,12 +50,37 @@ struct VersionCheckResult {
     bool remoteIsRC;
 };
 
+enum class PopupType {
+    Message,
+    YesNo,
+    YesNoCancel,
+};
+
+enum class PopupResult {
+    Ok,
+    Yes,
+    No,
+    Cancel,
+};
+
+using PopupCallback = std::function<void(PopupResult)>;
+
+struct Popup {
+    std::string title;
+    std::string message;
+    std::optional<PopupCallback> callback;
+    PopupType type;
+    ImGuiID id;
+};
+
 class Application {
 public:
     Application();
 
     int run(int argc, char** argv);
     int runCli(argparse::ArgumentParser& parser);
+
+    void showPopup(const std::string& title, const std::string& message, PopupType type, std::optional<PopupCallback> callback);
 
     void saveConfig();
     ImFont* getFont(const std::string& name);
@@ -104,6 +129,7 @@ private:
     void renderWelcomeWindow();
     void renderRestartPopup();
     void renderBackupsWindow();
+    void renderGenericPopups();
     void setColors();
     void loadFonts();
     void loadConfig();
@@ -122,6 +148,10 @@ private:
     void tryOpenEditor(const std::filesystem::path& path);
 
     void initDefaultDockingLayout();
+
+    static bool renderMessagePopup(const Popup& popup);
+    static std::optional<PopupResult> renderYesNoPopup(const Popup& popup);
+    static std::optional<PopupResult> renderYesNoCancelPopup(const Popup& popup);
 
     // Update checking
     bool isVersionNewer(const AppVersion& current, const AppVersion& other) const;
@@ -199,6 +229,8 @@ private:
     bool m_uiScaleChanged = false;
     bool m_reloadFonts = false;
     Keybind* m_listeningKeybind = nullptr;
+
+    std::queue<Popup> m_queued_popups;
 
     float m_lastToolbarWidth = 0.0f;
 

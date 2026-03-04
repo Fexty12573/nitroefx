@@ -50,7 +50,7 @@ public:
     size_t getTextureCount() const { return m_textures.size(); }
 
     void save(const std::filesystem::path& filename);
-    void save(std::vector<u8> data) const;
+    void save(std::vector<u8>& data);
     void exportTextures(const std::filesystem::path& directory, const std::filesystem::path& backupDir = {}) const;
     void exportTexture(size_t index, const std::filesystem::path& file) const;
 
@@ -62,6 +62,7 @@ public:
 
 private:
     void load(std::istream& stream, bool createGpuTextures);
+    void saveTo(std::ostream& stream);
     static bool isValid(std::istream& stream);
 
     static SPLResourceHeader fromNative(const SPLResourceHeaderNative& native);

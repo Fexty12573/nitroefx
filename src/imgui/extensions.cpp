@@ -319,3 +319,17 @@ bool ImGui::IconButton(const char* icon, const char* text, ImU32 iconTint, bool 
 
     return pressed;
 }
+
+bool ImGui::CenteredButton(const char* label, float alignment) {
+    const ImGuiStyle& style = GetStyle();
+
+    const float size = CalcTextSize(label).x + style.FramePadding.x * 2.0f;
+    const float avail = GetContentRegionAvail().x;
+
+    const float offset = (avail - size) * alignment;
+    if (offset > 0) {
+        SetCursorPosX(GetCursorPosX() + offset);
+    }
+
+    return Button(label);
+}

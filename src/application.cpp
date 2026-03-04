@@ -291,6 +291,8 @@ int Application::run(int argc, char** argv) {
 
             renderRestartPopup();
 
+            renderGenericPopups();
+
             ImGui::Render();
             glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
             glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
@@ -396,6 +398,19 @@ int Application::runCli(argparse::ArgumentParser& parser) {
     }
 
     return 0;
+}
+
+void Application::showPopup(const std::string& title, const std::string& message, PopupType type, std::optional<PopupCallback> callback) {
+    const auto id = ImGui::GetID(title.c_str());
+
+    // If this is the first popup in the queue we immediately open it
+    if (m_queued_popups.empty()) {
+        ImGui::PushOverrideID(id);
+        ImGui::OpenPopup(title.c_str());
+        ImGui::PopID();
+    }
+
+    m_queued_popups.emplace(title, message, std::move(callback), type, id);
 }
 
 void Application::initLogging() {
@@ -555,6 +570,7 @@ void Application::dispatchEvent(const SDL_Event& event) {
 
 void Application::renderMenuBar() {
     const bool hasProject = g_projectManager->hasProject();
+    const bool hasNarcProject = g_projectManager->hasNarcProject();
     const bool hasActiveEditor = g_projectManager->hasActiveEditor();
     const bool hasOpenEditors = g_projectManager->hasOpenEditors();
 
@@ -565,7 +581,7 @@ void Application::renderMenuBar() {
                     spdlog::warn("New Project not implemented");
                 }
 
-                if (ImGui::MenuItemIcon(ICON_FA_FILE_CIRCLE_PLUS, "SPL File", "Ctrl+N")) {
+                if (ImGui::MenuItemIcon(ICON_FA_FILE_CIRCLE_PLUS, "SPL/NARC File", "Ctrl+N")) {
                     g_projectManager->openEditor();
                 }
 
@@ -581,7 +597,7 @@ void Application::renderMenuBar() {
                     }
                 }
 
-                if (ImGui::MenuItemIcon(ICON_FA_FILE, "SPL File", KEYBINDSTR(OpenFile))) {
+                if (ImGui::MenuItemIcon(ICON_FA_FILE, "SPL/NARC File", KEYBINDSTR(OpenFile))) {
                     const std::filesystem::path filePath = openFile();
                     if (!filePath.empty() && std::filesystem::exists(filePath)) {
                         tryOpenEditor(filePath);
@@ -642,6 +658,16 @@ void Application::renderMenuBar() {
 
             if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save All", KEYBINDSTR(SaveAll), false, AppColors::LightBlue, hasOpenEditors)) {
                 g_projectManager->saveAllEditors();
+            }
+
+            if (ImGui::MenuItemIcon(ICON_FA_FLOPPY_DISK, "Save NARC", nullptr, false, AppColors::LightBlue, hasNarcProject)) {
+                g_projectManager->saveAllNarcEditors();
+                g_projectManager->saveNarcProject();
+            }
+
+            if (ImGui::BeginItemTooltip()) {
+                ImGui::Text("This will also save all open files from the opened NARC");
+                ImGui::EndTooltip();
             }
 
             if (ImGui::MenuItemIcon(ICON_FA_XMARK, "Close", KEYBINDSTR(Close), false, 0, hasActiveEditor)) {
@@ -1412,6 +1438,57 @@ void Application::renderBackupsWindow() {
     }
 
     ImGui::PopID();
+}
+
+void Application::renderGenericPopups() {
+    if (m_queued_popups.empty()) {
+        return;
+    }
+
+    bool openNext = false;
+    const auto& popup = m_queued_popups.front();
+
+    ImGui::PushOverrideID(popup.id);
+    switch (popup.type) {
+    case PopupType::Message:
+        if (renderMessagePopup(popup)) {
+            if (popup.callback) {
+                popup.callback.value()(PopupResult::Ok);
+            }
+
+            m_queued_popups.pop();
+            openNext = true;
+        }
+        break;
+    case PopupType::YesNo:
+        if (const auto result = renderYesNoPopup(popup)) {
+            if (popup.callback) {
+                popup.callback.value()(result.value());
+            }
+
+            m_queued_popups.pop();
+            openNext = true;
+        }
+        break;
+    case PopupType::YesNoCancel:
+        if (const auto result = renderYesNoCancelPopup(popup)) {
+            if (popup.callback) {
+                popup.callback.value()(result.value());
+            }
+
+            m_queued_popups.pop();
+            openNext = true;
+        }
+        break;
+    }
+    ImGui::PopID();
+
+    if (openNext && !m_queued_popups.empty()) {
+        const auto& next = m_queued_popups.front();
+        ImGui::PushOverrideID(next.id);
+        ImGui::OpenPopup(next.title.c_str());
+        ImGui::PopID();
+    }
 }
 
 void Application::setColors() {
@@ -2222,6 +2299,68 @@ void Application::initDefaultDockingLayout() {
     ImGui::DockBuilderFinish(ImGui::GetID("DockSpace"));
 
     m_layoutInitialized = true;
+}
+
+bool Application::renderMessagePopup(const Popup& popup) {
+    if (ImGui::BeginPopup(popup.title.c_str())) {
+        ImGui::TextUnformatted(popup.message.c_str(), popup.message.c_str() + popup.message.size());
+        if (ImGui::CenteredButton("Ok")) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    return ImGui::IsPopupOpen(popup.title.c_str());
+}
+
+std::optional<PopupResult> Application::renderYesNoPopup(const Popup& popup) {
+    std::optional<PopupResult> result = std::nullopt;
+
+    if (ImGui::BeginPopupModal(popup.title.c_str())) {
+        ImGui::TextUnformatted(popup.message.c_str(), popup.message.c_str() + popup.message.size());
+
+        if (ImGui::Button("Yes")) {
+            result = PopupResult::Yes;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No")) {
+            result = PopupResult::No;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    return result;
+}
+
+std::optional<PopupResult> Application::renderYesNoCancelPopup(const Popup& popup) {
+    std::optional<PopupResult> result = std::nullopt;
+
+    if (ImGui::BeginPopupModal(popup.title.c_str())) {
+        ImGui::TextUnformatted(popup.message.c_str(), popup.message.c_str() + popup.message.size());
+
+        if (ImGui::Button("Yes")) {
+            result = PopupResult::Yes;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No")) {
+            result = PopupResult::No;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            result = PopupResult::Cancel;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    return result;
 }
 
 bool Application::isVersionNewer(const AppVersion& current, const AppVersion& other) const {

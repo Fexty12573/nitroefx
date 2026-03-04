@@ -6,6 +6,7 @@
 class AppColors {
 public:
     static constexpr u32 Yellow = IM_COL32(255, 221, 93, 255);
+    static constexpr u32 PastelYellow = IM_COL32(226, 192, 112, 255);
     static constexpr u32 DarkBeige = IM_COL32(157, 142, 106, 255);
     static constexpr u32 LightBlue = IM_COL32(105, 190, 255, 255);
     static constexpr u32 LightBlue2 = IM_COL32(93, 171, 231, 255);
