@@ -22,8 +22,11 @@ jobs:
       fail-fast: false
 
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        build_type: [dist]
+        include:
+          - os: ubuntu-latest
+            cmake-preset: linux-actions
+          - os: windows-latest
+            cmake-preset: windows-actions
     
     env:
       USERNAME: Fexty12573
@@ -103,16 +106,6 @@ jobs:
         .$(${{ env.VCPKG_EXE }} fetch nuget) `
           setapikey "${{ secrets.GH_PACKAGES_TOKEN }}" `
           -Source "${{ env.FEED_URL }}"
-
-    - name: Select CMake preset
-      id: select-preset
-      run: |
-        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          echo "preset=windows-x64-${{ matrix.build_type }}" >> $GITHUB_OUTPUT
-        else
-          echo "preset=linux-x64-${{ matrix.build_type }}" >> $GITHUB_OUTPUT
-        fi
-      shell: bash
     
     - name: Setup MSVC environment (Windows)
       if: matrix.os == 'windows-latest'
@@ -126,7 +119,7 @@ jobs:
         "PATH=$cleanedPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Configure CMake
-      run: cmake --preset ${{ steps.select-preset.outputs.preset }}
+      run: cmake --preset ${{ matrix.cmake-preset }}
       shell: bash
 
     - name: Build (Windows)
