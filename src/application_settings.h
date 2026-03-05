@@ -12,7 +12,6 @@ struct ApplicationSettings {
     bool checkForUpdates;
     bool showReleaseCandidates;
     bool toolbarCentered;
-    float uiScale = 1.0f;
     std::vector<std::string> indexIgnores;
     std::chrono::seconds backupInterval; // zero duration means disabled
 

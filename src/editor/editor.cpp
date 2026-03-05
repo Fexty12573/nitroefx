@@ -95,7 +95,7 @@ void Editor::render() {
 
     std::vector<std::shared_ptr<EditorInstance>> toClose;
     if (ImGui::BeginTabBar("Editor Instances", ImGuiTabBarFlags_Reorderable 
-        | ImGuiTabBarFlags_FittingPolicyResizeDown | ImGuiTabBarFlags_AutoSelectNewTabs)) {
+        | ImGuiTabBarFlags_FittingPolicyShrink | ImGuiTabBarFlags_AutoSelectNewTabs)) {
         for (const auto& instance : instances) {
             const auto [open, active] = instance->render();
             if (!open) {
@@ -859,7 +859,7 @@ void Editor::renderTextureManager() {
             }
         }
 
-        ImGui::BeginChild("##TextureList", {}, ImGuiChildFlags_Border);
+        ImGui::BeginChild("##TextureList", {}, ImGuiChildFlags_Borders);
         bool anyHovered = false;
 
         const ImVec2 padding = { ImGui::GetStyle().FramePadding.x, 16.0f - ImGui::GetTextLineHeight() * 0.5f };
@@ -1197,28 +1197,28 @@ void Editor::renderResourceEditor() {
 
             if (ImGui::BeginTabBar("##editorTabs")) {
                 if (ImGui::BeginTabItem("General")) {
-                    ImGui::BeginChild("##headerEditor", {}, ImGuiChildFlags_Border);
+                    ImGui::BeginChild("##headerEditor", {}, ImGuiChildFlags_Borders);
                     renderHeaderEditor(resource.header);
                     ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
 
                 if (ImGui::BeginTabItem("Behaviors")) {
-                    ImGui::BeginChild("##headerEditor", {}, ImGuiChildFlags_Border);
+                    ImGui::BeginChild("##headerEditor", {}, ImGuiChildFlags_Borders);
                     renderBehaviorEditor(resource);
                     ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
 
                 if (ImGui::BeginTabItem("Animations")) {
-                    ImGui::BeginChild("##animationEditor", {}, ImGuiChildFlags_Border);
+                    ImGui::BeginChild("##animationEditor", {}, ImGuiChildFlags_Borders);
                     renderAnimationEditor(resource);
                     ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
 
                 if (ImGui::BeginTabItem("Children")) {
-                    ImGui::BeginChild("##childEditor", {}, ImGuiChildFlags_Border);
+                    ImGui::BeginChild("##childEditor", {}, ImGuiChildFlags_Borders);
                     renderChildrenEditor(resource);
                     ImGui::EndChild();
                     ImGui::EndTabItem();
@@ -1247,7 +1247,7 @@ void Editor::renderSettings() {
         ImGui::BeginChild(
             ImGui::GetID("##SettingsFrame"),
             ImVec2(0, -footerReserve),
-            ImGuiChildFlags_Border,
+            ImGuiChildFlags_Borders,
             ImGuiWindowFlags_AlwaysVerticalScrollbar
         );
 
@@ -1363,9 +1363,7 @@ void Editor::renderTutorial() {
             ImGui::Image(icon->getHandle(), { iconSize, iconSize });
         }
 
-        if (auto* large = g_application->getFont("Large")) {
-            ImGui::PushFont(large);
-        }
+        ImGui::PushFont(nullptr, Application::getFontSizeLarge());
 
         constexpr auto title = "NitroEFX Quick Tutorial";
         const auto titleSize = ImGui::CalcTextSize(title);
@@ -1373,9 +1371,7 @@ void Editor::renderTutorial() {
         ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
         ImGui::TextUnformatted(title);
 
-        if (g_application->getFont("Large")) {
-            ImGui::PopFont();
-        }
+        ImGui::PopFont();
 
         ImGui::Separator();
 
@@ -1854,7 +1850,7 @@ bool Editor::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavio
     if (hovered) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
-    ImGui::BeginChild("##gravityEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##gravityEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::TextUnformatted("Gravity");
 
     if (hovered) {
@@ -1875,7 +1871,7 @@ bool Editor::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>
     if (hovered) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
-    ImGui::BeginChild("##randomEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##randomEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::TextUnformatted("Random");
 
     if (hovered) {
@@ -1897,7 +1893,7 @@ bool Editor::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>
     if (hovered) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
-    ImGui::BeginChild("##magnetEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##magnetEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::TextUnformatted("Magnet");
 
     if (hovered) {
@@ -1919,7 +1915,7 @@ bool Editor::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& sp
     if (hovered) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
-    ImGui::BeginChild("##spinEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##spinEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::TextUnformatted("Spin");
 
     if (hovered) {
@@ -1946,7 +1942,7 @@ bool Editor::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisi
     if (hovered) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
-    ImGui::BeginChild("##collisionPlaneEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##collisionPlaneEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::TextUnformatted("Collision Plane");
 
     if (hovered) {
@@ -1973,7 +1969,7 @@ bool Editor::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenc
     if (hovered) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
-    ImGui::BeginChild("##convergenceEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##convergenceEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::TextUnformatted("Convergence");
 
     if (hovered) {
@@ -2062,7 +2058,7 @@ bool Editor::renderScaleAnimEditor(SPLScaleAnim& res) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
 
-    ImGui::BeginChild("##scaleAnimEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##scaleAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
 
     if (hovered) {
         ImGui::PopStyleColor();
@@ -2114,7 +2110,7 @@ bool Editor::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
 
-    ImGui::BeginChild("##colorAnimEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##colorAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
 
     if (hovered) {
         ImGui::PopStyleColor();
@@ -2231,7 +2227,7 @@ bool Editor::renderAlphaAnimEditor(SPLAlphaAnim& res) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
 
-    ImGui::BeginChild("##alphaAnimEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##alphaAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
 
     if (hovered) {
         ImGui::PopStyleColor();
@@ -2294,7 +2290,7 @@ bool Editor::renderTexAnimEditor(SPLTexAnim& res) {
         ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
     }
 
-    ImGui::BeginChild("##texAnimEditor", {}, ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("##texAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
 
     if (hovered) {
         ImGui::PopStyleColor();

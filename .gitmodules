@@ -9,3 +9,9 @@
 [submodule "external/microtar"]
 	path = external/microtar
 	url = https://github.com/rxi/microtar.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "external/implot"]
+	path = external/implot
+	url = https://github.com/epezent/implot.git

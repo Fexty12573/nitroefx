@@ -16,6 +16,7 @@
 #include <imgui_stdlib.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
+#include <im_anim.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -40,6 +41,11 @@
 #endif
 #include <tinyfiledialogs.h>
 #include "util/wsl.h"
+
+
+extern void ImAnimDemoWindow();
+extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 #define KEYBINDSTR(name) getKeybind(ApplicationAction::name)->toString().c_str()
 
@@ -168,6 +174,9 @@ int Application::run(int argc, char** argv) {
     }
 #endif
 
+    io.ConfigDpiScaleFonts = true;
+    io.ConfigDpiScaleViewports = true;
+
     m_iniFilename = (getConfigPath() / "nitroefx.ini").string();
     io.IniFilename = m_iniFilename.c_str();
 
@@ -242,6 +251,9 @@ int Application::run(int argc, char** argv) {
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
+
+            iam_update_begin_frame();
+            iam_clip_update(io.DeltaTime);
 
             // Build default docking layout once if no ini file exists
             if (!m_layoutInitialized) {
@@ -325,12 +337,12 @@ int Application::run(int argc, char** argv) {
         applyUpdateNow(binaryPath, false);
     } 
 
+    saveConfig();
+    
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
-
-    saveConfig();
 
     return 0;
 }
@@ -795,10 +807,10 @@ void Application::renderMenuBar() {
 
     const auto viewport = (ImGuiViewportP*)ImGui::GetMainViewport();
     constexpr auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-    const float framePaddingY = 4.0f * m_settings.uiScale;
-    const float itemHeight = 24.0f * m_settings.uiScale;
-    const float barHeight = itemHeight + 2.0f;
-    const ImVec2 size = { itemHeight, itemHeight };
+    constexpr float framePaddingY = 4.0f;
+    constexpr float itemHeight = 24.0f;
+    constexpr float barHeight = itemHeight + 2.0f;
+    constexpr ImVec2 size = { itemHeight, itemHeight };
 
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AppColors::DarkGray);
@@ -957,7 +969,7 @@ void Application::renderPreferences() {
 
             ImGui::Spacing();
             ImGui::SeparatorText("Interface");
-            m_uiScaleChanged |= ImGui::SliderFloat("UI Scale", &m_settings.uiScale, 0.5f, 3.0f, "%.1fx");
+            ImGui::SliderFloat("Font Scale", &ImGui::GetStyle().FontScaleMain, 0.2f, 3.0f, "%.1fx");
             ImGui::Checkbox("Center Toolbar", &m_settings.toolbarCentered);
 
             ImGui::Spacing();
@@ -1094,12 +1106,6 @@ void Application::renderPreferences() {
     ImGui::PopID();
 
     if (wasOpen && !m_preferencesOpen) {
-        // Preferences window was just closed
-        if (m_uiScaleChanged) {
-            ImGui::OpenPopup("Restart Required##Application");
-            m_uiScaleChanged = false;
-        }
-
         using std::operator""s;
 
         m_settings.indexIgnores.clear();
@@ -1195,7 +1201,7 @@ void Application::renderWelcomeWindow() {
             ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
         }
 
-        ImGui::PushFont(getFont("Large"));
+        ImGui::PushFont(nullptr, getFontSizeLarge());
         const auto appStr = fmt::format("NitroEFX {}", Application::VERSION);
         const auto size = ImGui::CalcTextSize(appStr.c_str());
         ImGui::SetCursorPosX((windowSize.x - size.x) * 0.5f);
@@ -1357,7 +1363,7 @@ void Application::renderWelcomeWindow() {
 
 void Application::renderRestartPopup() {
     if (ImGui::BeginPopupModal("Restart Required##Application", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Changing the UI scale requires a restart to take effect.");
+        ImGui::Text("Some changes require a restart to take effect.");
         ImGui::Separator();
 
         if (ImGui::Button("Restart Now")) {
@@ -1390,7 +1396,7 @@ void Application::renderBackupsWindow() {
             ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
         }
 
-        ImGui::PushFont(getFont("Large"));
+        ImGui::PushFont(nullptr, getFontSizeLarge());
         ImGui::Text("The following unsaved files have been recovered:");
         ImGui::PopFont();
 
@@ -1595,27 +1601,32 @@ void Application::loadFonts() {
     const ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
 
+    constexpr ImWchar iconRanges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+
     ImFontConfig config;
     config.OversampleH = 2;
     config.OversampleV = 2;
     config.PixelSnapH = true;
     config.FontDataOwnedByAtlas = false;
 
+    // Since ImGui 1.92.0: Make sure the first font doesn't take up any glyph that are
+    // part of the icon font.
+    config.GlyphExcludeRanges = iconRanges;
+
     io.Fonts->AddFontFromMemoryCompressedTTF(
         g_tahoma_compressed_data, 
         g_tahoma_compressed_size, 
-        18.0f * m_settings.uiScale, 
+        BASE_FONT_SIZE,
         &config
     );
 
+    config.GlyphExcludeRanges = nullptr;
     config.MergeMode = true;
-    constexpr ImWchar iconRanges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
     io.Fonts->AddFontFromMemoryCompressedTTF(
         g_icon_font_compressed_data, 
         g_icon_font_compressed_size, 
-        18.0f * m_settings.uiScale, 
-        &config,
-        iconRanges
+        BASE_FONT_SIZE,
+        &config
     );
 
     config.MergeMode = false;
@@ -1623,18 +1634,9 @@ void Application::loadFonts() {
     m_fonts["Italic"] = io.Fonts->AddFontFromMemoryCompressedTTF(
         g_tahoma_italic_compressed_data,
         g_tahoma_italic_compressed_size,
-        18.0f * m_settings.uiScale,
+        BASE_FONT_SIZE,
         &config
     );
-
-    m_fonts["Large"] = io.Fonts->AddFontFromMemoryCompressedTTF(
-        g_tahoma_compressed_data,
-        g_tahoma_compressed_size,
-        24.0f * m_settings.uiScale,
-        &config
-    );
-
-    io.Fonts->Build();
 }
 
 void Application::loadConfig() {
@@ -1713,7 +1715,9 @@ void Application::loadConfig() {
 
     m_settings.checkForUpdates = config.value("checkForUpdates", m_settings.checkForUpdates);
     m_settings.showReleaseCandidates = config.value("showReleaseCandidates", m_settings.showReleaseCandidates);
-    m_settings.uiScale = config.value("uiScale", m_settings.uiScale);
+
+    auto& style = ImGui::GetStyle();
+    style.FontScaleMain = config.value("fontScale", 1.0f);
 
     if (config.contains("indexIgnores") && config["indexIgnores"].is_array()) {
         for (const auto& ignore : config["indexIgnores"]) {
@@ -2045,7 +2049,7 @@ void Application::saveConfig() {
 
     config["checkForUpdates"] = m_settings.checkForUpdates;
     config["showReleaseCandidates"] = m_settings.showReleaseCandidates;
-    config["uiScale"] = m_settings.uiScale;
+    config["fontScale"] = ImGui::GetStyle().FontScaleMain;
 
     config["indexIgnores"] = nlohmann::json::array();
     for (const auto& ignore : m_settings.indexIgnores) {

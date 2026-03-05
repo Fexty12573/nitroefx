@@ -91,7 +91,7 @@ std::pair<bool, bool> EditorInstance::render() {
     m_camera.setViewportHovered(false);
 
     if (m_isTemp) {
-        ImGui::PushFont(g_application->getFont("Italic"));
+        ImGui::PushFont(g_application->getFont("Italic"), 0.0f);
     }
 
     const auto& activeEditor = g_projectManager->getActiveEditor();

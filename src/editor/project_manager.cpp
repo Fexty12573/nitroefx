@@ -365,7 +365,7 @@ void ProjectManager::render() {
                 ImGui::InputTextWithHint("##Filter", "Search by name...", &m_searchString);
             }
 
-            ImGui::BeginChild("##ProjectManagerFiles", {}, ImGuiChildFlags_Border);
+            ImGui::BeginChild("##ProjectManagerFiles", {}, ImGuiChildFlags_Borders);
 
             if (m_isNarc) {
                 for (size_t i = 0; i < m_narc.nfiles; i++) {

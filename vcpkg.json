@@ -4,24 +4,16 @@
   "dependencies": [
     "fmt",
     "glm",
-    {
-      "name": "imgui",
-      "features": [
-        "docking-experimental",
-        "opengl3-binding",
-        "sdl3-binding"
-      ]
-    },
     "sdl3",
     "spdlog",
     "glew",
-    "implot",
     "nlohmann-json",
     "argparse",
     "libspng",
     "curl",
     "zlib",
     "minizip-ng",
-    "efsw"
+    "efsw",
+    "freetype"
   ]
 }

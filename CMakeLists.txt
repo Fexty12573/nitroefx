@@ -11,19 +11,18 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(SDL3 CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(GLEW REQUIRED)
-find_package(implot CONFIG REQUIRED)
 find_package(SPNG CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(minizip-ng CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(argparse CONFIG REQUIRED)
+find_package(Freetype REQUIRED)
 add_subdirectory(external/embed)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
@@ -32,6 +31,28 @@ set(EXTERNAL_SOURCES
     external/tinyfiledialogs/tinyfiledialogs.c
     external/microtar/src/microtar.c
     external/nitroarc/nitroarc.c
+
+    # ImGui
+    external/imgui/imgui.cpp
+    external/imgui/imgui_draw.cpp
+    external/imgui/imgui_tables.cpp
+    external/imgui/imgui_widgets.cpp
+    external/imgui/misc/freetype/imgui_freetype.cpp
+    external/imgui/misc/cpp/imgui_stdlib.cpp
+
+    # ImGui Backends
+    external/imgui/backends/imgui_impl_sdl3.cpp
+    external/imgui/backends/imgui_impl_opengl3.cpp
+
+    # ImAnim
+    external/ImAnim/im_anim.cpp
+    external/ImAnim/im_anim_demo.cpp
+    external/ImAnim/im_anim_doc.cpp
+    external/ImAnim/im_anim_usecase.cpp
+
+    # ImPlot
+    external/implot/implot.cpp
+    external/implot/implot_items.cpp
 )
 
 add_executable(nitroefx ${SOURCES} ${EXTERNAL_SOURCES})
@@ -103,24 +124,30 @@ target_include_directories(nitroefx PRIVATE
     external/microtar/src
     external/stb
     external/libimagequant/imagequant-sys
-    external/nitroarc)
+    external/nitroarc
+    external/ImAnim
+    external/imgui
+    external/imgui/backends
+    external/imgui/misc/freetype
+    external/imgui/misc/cpp
+    external/implot)
 target_compile_definitions(nitroefx PRIVATE 
     GLM_ENABLE_EXPERIMENTAL
-    IMGUI_DEFINE_MATH_OPERATORS)
+    IMGUI_DEFINE_MATH_OPERATORS
+    IMGUI_USER_CONFIG=<imgui/config.h>)
 target_link_libraries(nitroefx PRIVATE 
     SDL3::SDL3 
-    imgui::imgui 
     spdlog::spdlog
     fmt::fmt
     glm::glm
     OpenGL::GL
     GLEW::GLEW
-    implot::implot
     spng::spng_static
     CURL::libcurl_static
     ZLIB::ZLIB
     MINIZIP::minizip-ng
     efsw::efsw
+    Freetype::Freetype
     ${IMAGEQUANT_LIB})
 
 if (WIN32)

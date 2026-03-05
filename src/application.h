@@ -84,6 +84,8 @@ public:
 
     void saveConfig();
     ImFont* getFont(const std::string& name);
+    static constexpr float getFontSize() { return BASE_FONT_SIZE; }
+    static constexpr float getFontSizeLarge() { return BASE_FONT_SIZE_LARGE; }
 
     std::shared_ptr<GLTexture> getIcon() const {
         return m_icon;
@@ -114,6 +116,9 @@ public:
     static int update(const std::filesystem::path& srcPath, const std::filesystem::path& dstPath, unsigned long pid, bool relaunch);
 
     static constexpr auto VERSION = NITROEFX_VERSION;
+
+    static constexpr auto BASE_FONT_SIZE = 18.0f;
+    static constexpr auto BASE_FONT_SIZE_LARGE = 24.0f;
 
 private:
     void initLogging();

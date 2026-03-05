@@ -32,7 +32,7 @@ void Application::renderAboutWindow() {
             ImGui::Image(m_icon->getHandle(), { iconSize, iconSize });
         }
 
-        ImGui::PushFont(getFont("Large"));
+        ImGui::PushFont(nullptr, getFontSizeLarge());
 
         const auto appStr = fmt::format("NitroEFX {}", Application::VERSION);
         const auto size = ImGui::CalcTextSize(appStr.c_str());

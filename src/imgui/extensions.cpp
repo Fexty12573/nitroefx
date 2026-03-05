@@ -150,7 +150,7 @@ bool ImGui::GradientButton(const char* label, const ImVec2& size, ImU32 textColo
             bgColor2 = bgColor1;
         }
     }
-    RenderNavHighlight(bb, id);
+    RenderNavCursor(bb, id);
 
 #if 0
     window->DrawList->AddRectFilledMultiColor(bb.Min, bb.Max, bg_color_1, bg_color_1, bg_color_2, bg_color_2);
