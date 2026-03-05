@@ -53,14 +53,14 @@ public:
     void writeBytes(std::span<const u8> bytes) {
         if (m_ptr >= m_data.size()) {
             // Option A: Append to end
-            m_data.append_range(bytes);
+            std::ranges::copy(bytes, std::back_inserter(m_data));
         } else if (m_ptr + bytes.size() <= m_data.size()) {
             // Option B: Overwrite existing
-            std::copy(bytes.begin(), bytes.end(), m_data.begin() + m_ptr);
+            std::ranges::copy(bytes, m_data.begin() + m_ptr);
         } else {
             // Option C: Overwrite existing, but new data goes beyond current capacity
             m_data.resize(m_ptr + bytes.size());
-            std::copy(bytes.begin(), bytes.end(), m_data.begin() + m_ptr);
+            std::ranges::copy(bytes, m_data.begin() + m_ptr);
         }
 
         m_ptr += bytes.size();
