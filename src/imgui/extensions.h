@@ -5,6 +5,8 @@
 
 namespace ImGui {
 
+inline void PushID(size_t id) { PushID(reinterpret_cast<void*>(id)); }
+
 bool GradientButton(const char* label, const ImVec2& size, ImU32 textColor, ImU32 bgColor, ImU32 bgColor2);
 bool RedButton(const char* label, const ImVec2& size = { 0.0f, 0.0f });
 bool GreenButton(const char* label, const ImVec2& size = { 0.0f, 0.0f });

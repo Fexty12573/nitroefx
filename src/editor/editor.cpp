@@ -17,6 +17,7 @@
 #include <imgui.h>
 #include <implot.h>
 #include <imgui_internal.h>
+#include <im_anim.h>
 #include <tinyfiledialogs.h>
 #include <stb_image.h>
 #include <spng.h>
@@ -592,6 +593,11 @@ void Editor::selectResource(u64 editorID, size_t resourceIndex) {
 void Editor::renderResourcePicker() {
     if (ImGui::Begin("Resource Picker##Editor", &m_pickerOpen)) {
 
+        const auto& style = ImGui::GetStyle();
+        constexpr float thumbnailSize = 48.0f;
+        constexpr ImVec2 thumbnailSizeVec = { thumbnailSize, thumbnailSize };
+        const float itemHeight = thumbnailSize + style.FramePadding.y * 2;
+
         const auto& editor = g_projectManager->getActiveEditor();
         if (!editor) {
             ImGui::Text("No editor open");
@@ -618,14 +624,16 @@ void Editor::renderResourcePicker() {
 
         const auto contentRegion = ImGui::GetContentRegionAvail();
         if (ImGui::BeginListBox("##Resources", contentRegion)) {
-            const ImGuiStyle& style = ImGui::GetStyle();
             const float itemWidth = contentRegion.x - (style.ItemSpacing.x + style.WindowPadding.x) * 1.3f;
+            const float dt = ImGui::GetIO().DeltaTime;
 
             for (size_t i = 0; i < resources.size(); ++i) {
                 const auto& resource = resources[i];
                 const auto& texture = textures[resource.header.misc.textureIndex];
 
                 ImGui::PushID(i);
+                const auto itemId = ImGui::GetID("##Resource");
+
                 const auto name = fmt::format("[{}] Tex {}x{}", i, texture.width, texture.height);
 
                 auto bgColor = m_selectedResources[id] == i
@@ -633,19 +641,37 @@ void Editor::renderResourcePicker() {
                     : style.Colors[ImGuiCol_Button];
 
                 const auto cursor = ImGui::GetCursorScreenPos();
-                if (ImGui::InvisibleButton("##Resource", { itemWidth, 32 })) {
+                if (ImGui::InvisibleButton("##Resource", { itemWidth, itemHeight })) {
                     m_selectedResources[id] = i;
                     editor->notifyResourceChanged(i);
                 }
 
-                if (ImGui::IsItemHovered()) {
-                    bgColor = style.Colors[ImGuiCol_ButtonHovered];
+                const bool hovered = ImGui::IsItemHovered();
+                const bool pressed = ImGui::IsItemActive();
+
+                if (hovered) {
                     anyHovered = true;
 
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                         ImGui::OpenPopup("##ResourcePopup");
                     }
                 }
+
+                const auto targetColor = pressed
+                    ? style.Colors[ImGuiCol_SliderGrabActive]
+                    : hovered ? style.Colors[ImGuiCol_ButtonHovered] : bgColor;
+
+                bgColor = iam_tween_color(
+                    itemId,
+                    1,
+                    targetColor,
+                    0.2f,
+                    iam_ease_preset(iam_ease_linear),
+                    iam_policy_crossfade,
+                    iam_col_srgb,
+                    dt,
+                    bgColor
+                );
 
                 const auto bgColor2 = bgColor * ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
 
@@ -654,7 +680,7 @@ void Editor::renderResourcePicker() {
                 const int firstVtx = drawList->VtxBuffer.Size;
                 drawList->AddRectFilled(
                     cursor, 
-                    { cursor.x + itemWidth, cursor.y + 32 },
+                    { cursor.x + itemWidth, cursor.y + itemHeight },
                     ImGui::ColorConvertFloat4ToU32(bgColor),
                     style.FrameRounding
                 );
@@ -662,19 +688,51 @@ void Editor::renderResourcePicker() {
 
                 ImGui::ShadeVertsLinearColorGradientKeepAlpha(drawList,
                     firstVtx, lastVtx,
-                    cursor, { cursor.x, cursor.y + 32 },
+                    cursor, { cursor.x, cursor.y + itemHeight },
                     ImGui::ColorConvertFloat4ToU32(bgColor), 
                     ImGui::ColorConvertFloat4ToU32(bgColor2)
                 );
 
-                ImGui::SetCursorScreenPos(cursor);
-                ImGui::Image((ImTextureID)(uintptr_t)texture.glTexture->getHandle(), { 32, 32 });
+                const ImVec2 offset = {
+                    iam_tween_float(
+                        itemId,
+                        0,
+                        hovered ? 8.0f : 0.0f,
+                        0.4f,
+                        iam_ease_preset(iam_ease_in_out_quad),
+                        iam_policy_crossfade,
+                        dt
+                    ),
+                    0.0f
+                };
+
+                const auto imagePos = cursor + style.FramePadding + offset;
+                const auto frameMinPos = imagePos - ImVec2(2, 2);
+                const auto frameMaxPos = imagePos + ImVec2(thumbnailSize + 2, thumbnailSize + 2);
+                drawList->AddRectFilled(
+                    frameMinPos,
+                    frameMaxPos,
+                    IM_COL32(60, 60, 60, 255),
+                    2
+                );
+
+                drawList->AddRect(
+                    frameMinPos,
+                    frameMaxPos,
+                    IM_COL32(230, 230, 230, 30),
+                    2
+                );
+
+                ImGui::SetCursorScreenPos(imagePos);
+                ImGui::Image(texture.glTexture->getHandle(), thumbnailSizeVec);
 
                 ImGui::SameLine();
 
+                ImGui::PushFont(nullptr, Application::getFontSizeLarge());
                 const auto textHeight = ImGui::GetFontSize();
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (32 - textHeight) / 2.0f);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (thumbnailSize - textHeight) / 2.0f);
                 ImGui::TextUnformatted(name.c_str());
+                ImGui::PopFont();
 
                 if (ImGui::BeginPopup("##ResourcePopup")) {
                     if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy", "Ctrl+C", false, AppColors::LightGreen3)) {
@@ -719,6 +777,9 @@ void Editor::renderResourcePicker() {
 
                     ImGui::EndPopup();
                 }
+
+                ImGui::SetCursorScreenPos(cursor);
+                ImGui::Dummy({ itemWidth, itemHeight });
 
                 ImGui::PopID();
             }
