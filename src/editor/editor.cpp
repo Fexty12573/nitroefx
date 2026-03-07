@@ -43,7 +43,7 @@ constexpr std::array s_emitterSpawnTypes = {
 }
 
 
-Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer() {
+Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer1() {
     m_gridRenderer = std::make_shared<GridRenderer>(s_gridDimensions, s_gridSpacing);
     m_debugRenderer = std::make_unique<DebugRenderer>(1000);
     m_collisionGridRenderer = std::make_shared<GridRenderer>(s_gridDimensions / 2, s_gridSpacing);
@@ -2134,10 +2134,10 @@ bool Editor::renderScaleAnimEditor(SPLScaleAnim& res) {
     NOTIFY(ImGui::SliderScalar("Out", ImGuiDataType_U8, &res.curve.out, &min, &max, "%u"));
     NOTIFY(ImGui::Checkbox("Loop", &res.flags.loop));
 
-    res.plot(m_xAnimBuffer, m_yAnimBuffer);
+    res.plot(m_xAnimBuffer, m_yAnimBuffer1);
     if (ImPlot::BeginPlot("##scaleAnimPlot", {-1, 0}, ImPlotFlags_CanvasOnly)) {
         ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-        ImPlot::PlotLine("Scale", m_xAnimBuffer.data(), m_yAnimBuffer.data(), m_xAnimBuffer.size());
+        ImPlot::PlotLine("Scale", m_xAnimBuffer.data(), m_yAnimBuffer1.data(), m_xAnimBuffer.size());
         ImPlot::EndPlot();
     }
 
@@ -2312,12 +2312,27 @@ bool Editor::renderAlphaAnimEditor(SPLAlphaAnim& res) {
     NOTIFY(ImGui::SliderFloat("Random Range", &res.flags.randomRange, 0, 1));
     NOTIFY(ImGui::Checkbox("Loop", &res.flags.loop));
 
-    res.plot(m_xAnimBuffer, m_yAnimBuffer);
+    res.plotWith(m_xAnimBuffer, m_yAnimBuffer1, 0.0f);
 
     if (ImPlot::BeginPlot("##alphaAnimPlot", {-1, 0}, ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
         ImPlot::SetupAxisLimits(ImAxis_X1, 0, 1);
         ImPlot::SetupAxisLimits(ImAxis_Y1, minAlpha, maxAlpha);
-        ImPlot::PlotLine("Alpha", m_xAnimBuffer.data(), m_yAnimBuffer.data(), m_xAnimBuffer.size());
+        
+        if (res.flags.randomRange > 0) {
+            res.plotWith(m_xAnimBuffer, m_yAnimBuffer2, res.flags.randomRange, 255);
+            ImPlot::PlotLine("Alpha Base", m_xAnimBuffer.data(), m_yAnimBuffer1.data(), m_xAnimBuffer.size());
+            ImPlot::PlotShaded(
+                "Alpha Variance",
+                m_xAnimBuffer.data(),
+                m_yAnimBuffer2.data(),
+                m_yAnimBuffer1.data(),
+                m_xAnimBuffer.size(),
+                ImPlotSpec{ ImPlotProp_FillAlpha, 0.25f }
+            );
+        } else {
+            ImPlot::PlotLine("Alpha", m_xAnimBuffer.data(), m_yAnimBuffer1.data(), m_xAnimBuffer.size());
+        }
+
         ImPlot::EndPlot();
     }
 

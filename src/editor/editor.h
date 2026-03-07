@@ -156,7 +156,8 @@ private:
     static constexpr glm::vec2 s_gridSpacing = { 1.0f, 1.0f };
 
     std::array<f32, 64> m_xAnimBuffer;
-    std::array<f32, 64> m_yAnimBuffer;
+    std::array<f32, 64> m_yAnimBuffer1;
+    std::array<f32, 64> m_yAnimBuffer2;
 
     TempTexture* m_tempTexture = nullptr;
     float m_tempTextureScale = 1.0f;

@@ -108,6 +108,10 @@ void SPLAlphaAnim::apply(SPLParticle& ptcl, const SPLResource& resource, f32 lif
 }
 
 void SPLAlphaAnim::plot(std::span<f32> xs, std::span<f32> ys) const {
+    plotWith(xs, ys, flags.randomRange);
+}
+
+void SPLAlphaAnim::plotWith(std::span<f32> xs, std::span<f32> ys, float variance) const {
     const size_t samples = std::min(xs.size(), ys.size());
     for (size_t i = 0; i < samples; i++) {
         const f32 lifeRate = (f32)i / (f32)samples;
@@ -115,13 +119,35 @@ void SPLAlphaAnim::plot(std::span<f32> xs, std::span<f32> ys) const {
 
         if (lifeRate < curve.getIn()) {
             ys[i] = glm::mix(alpha.start, alpha.mid, lifeRate / curve.getIn());
-        } else if (lifeRate < curve.getOut()) {
+        }
+        else if (lifeRate < curve.getOut()) {
             ys[i] = alpha.mid;
-        } else {
+        }
+        else {
             ys[i] = glm::mix(alpha.mid, alpha.end, (lifeRate - curve.getOut()) / (1.0f - curve.getOut()));
         }
 
-        ys[i] = SPLRandom::scaledRange(ys[i], flags.randomRange);
+        ys[i] = SPLRandom::scaledRange(ys[i], variance);
+    }
+}
+
+void SPLAlphaAnim::plotWith(std::span<f32> xs, std::span<f32> ys, float variance, u8 factor) const {
+    const size_t samples = std::min(xs.size(), ys.size());
+    for (size_t i = 0; i < samples; i++) {
+        const f32 lifeRate = (f32)i / (f32)samples;
+        xs[i] = lifeRate;
+
+        if (lifeRate < curve.getIn()) {
+            ys[i] = glm::mix(alpha.start, alpha.mid, lifeRate / curve.getIn());
+        }
+        else if (lifeRate < curve.getOut()) {
+            ys[i] = alpha.mid;
+        }
+        else {
+            ys[i] = glm::mix(alpha.mid, alpha.end, (lifeRate - curve.getOut()) / (1.0f - curve.getOut()));
+        }
+
+        ys[i] = SPLRandom::scaledRange(ys[i], variance, factor);
     }
 }
 
