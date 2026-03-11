@@ -1,6 +1,7 @@
 #include "extensions.h"
 
 #include <imgui_internal.h>
+#include <im_anim.h>
 #include <utility>
 
 namespace ImGui {
@@ -226,25 +227,85 @@ void ImGui::VerticalSeparator(float height) {
 }
 
 bool ImGui::IconButton(const char* icon, const ImVec2& size, ImU32 tint, bool enabled) {
-    ImGui::BeginDisabled(!enabled);
+    BeginDisabled(!enabled);
+
+    ImGuiWindow* window = GetCurrentWindow();
+    if (window->SkipItems) {
+        EndDisabled();
+        return false;
+    }
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID(icon);
+
+    const ImVec2 icon_size = CalcTextSize(icon);
+    const ImVec2 pos = window->DC.CursorPos;
+    const ImVec2 item_size = CalcItemSize(size, icon_size.x + style.FramePadding.x * 2.0f, icon_size.y + style.FramePadding.y * 2.0f);
+
+    const ImRect bb(pos, pos + item_size);
+    ItemSize(item_size, style.FramePadding.y);
+    if (!ItemAdd(bb, id)) {
+        EndDisabled();
+        return false;
+    }
+
+    bool hovered, held;
+    bool pressed = ButtonBehavior(bb, id, &hovered, &held);
+
+    // Render button frame
+    const ImU32 col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+    RenderNavCursor(bb, id);
+    RenderFrame(bb.Min, bb.Max, col, true, style.FrameRounding);
+
+    if (g.LogEnabled)
+        LogSetNextTextDecoration("[", "]");
+
+    // Animate icon scale on hover/active (scales from center)
+    const float target_scale = (held && hovered) ? 0.9f : hovered ? 1.2f : 1.0f;
+    const float icon_scale = iam_tween_float(
+        id,
+        ImHashStr("icon_scale"),
+        target_scale,
+        0.07f,
+        iam_ease_preset(iam_ease_linear),
+        iam_policy_crossfade,
+        g.IO.DeltaTime,
+        1.0f
+    );
+
+    const float scaled_font_size = g.FontSizeBase * icon_scale;
+    const ImVec2 button_center = ImVec2((bb.Min.x + bb.Max.x) * 0.5f, (bb.Min.y + bb.Max.y) * 0.5f);
+
+    // Measure icon at the actual scaled font size for accurate centering
+    PushFont(g.Font, scaled_font_size);
+
+    const ImVec2 scaled_icon_size = CalcTextSize(icon);
+    const ImVec2 icon_pos = ImVec2(
+        ImFloor(button_center.x - scaled_icon_size.x * 0.5f),
+        ImFloor(button_center.y - scaled_icon_size.y * 0.5f)
+    );
+
     if (tint != 0) {
         if (enabled) {
-            ImGui::PushStyleColor(ImGuiCol_Text, tint);
+            PushStyleColor(ImGuiCol_Text, tint);
         } else {
-            const auto disabledTint = ImGui::ColorConvertU32ToFloat4(tint) * ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_TextDisabled, disabledTint);
+            const auto disabledTint = ColorConvertU32ToFloat4(tint) * ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+            PushStyleColor(ImGuiCol_Text, disabledTint);
         }
     }
 
-    const bool clicked = ImGui::Button(icon, size);
+    window->DrawList->AddText(icon_pos, GetColorU32(ImGuiCol_Text), icon);
+    
+    PopFont();
 
     if (tint != 0) {
-        ImGui::PopStyleColor();
+        PopStyleColor();
     }
 
-    ImGui::EndDisabled();
+    EndDisabled();
 
-    return clicked;
+    return pressed;
 }
 
 bool ImGui::IconButton(const char* icon, const char* text, ImU32 iconTint, bool enabled) {
@@ -307,9 +368,36 @@ bool ImGui::IconButton(const char* icon, const char* text, ImU32 iconTint, bool 
     ImVec2 icon_pos = ImVec2(bb.Min.x + style.FramePadding.x, icon_y);
     ImVec2 text_pos = ImVec2(icon_pos.x + icon_size.x + spacing, text_y);
 
+    // Animate icon scale on hover/active
+    const float target_scale = (held && hovered) ? 0.9f : hovered ? 1.2f : 1.0f;
+    const float icon_scale = iam_tween_float(
+        id,
+        ImHashStr("icon_scale"),
+        target_scale,
+        0.07f,
+        iam_ease_preset(iam_ease_linear),
+        iam_policy_crossfade,
+        g.IO.DeltaTime,
+        1.0f
+    );
+
+    const float scaled_font_size = g.FontSizeBase * icon_scale;
+    const ImVec2 icon_center = ImVec2(icon_pos.x + icon_size.x * 0.5f, icon_pos.y + icon_size.y * 0.5f);
+
+    // Measure icon at the actual scaled font size for accurate centering
+    PushFont(g.Font, scaled_font_size);
+
+    const ImVec2 scaled_icon_size = CalcTextSize(icon);
+    const ImVec2 scaled_icon_pos = ImVec2(
+        ImFloor(icon_center.x - scaled_icon_size.x * 0.5f),
+        ImFloor(icon_center.y - scaled_icon_size.y * 0.5f)
+    );
+
     if (iconTint != 0) PushStyleColor(ImGuiCol_Text, iconTint);
-    window->DrawList->AddText(icon_pos, GetColorU32(ImGuiCol_Text), icon);
+    window->DrawList->AddText(scaled_icon_pos, GetColorU32(ImGuiCol_Text), icon);
     if (iconTint != 0) PopStyleColor();
+
+    PopFont();
 
     window->DrawList->AddText(text_pos, GetColorU32(ImGuiCol_Text), text);
 

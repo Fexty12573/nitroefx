@@ -807,10 +807,10 @@ void Application::renderMenuBar() {
 
     const auto viewport = (ImGuiViewportP*)ImGui::GetMainViewport();
     constexpr auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-    constexpr float framePaddingY = 4.0f;
-    constexpr float itemHeight = 24.0f;
-    constexpr float barHeight = itemHeight + 2.0f;
-    constexpr ImVec2 size = { itemHeight, itemHeight };
+    const float framePaddingY = 4.0f;
+    const float itemHeight = ImGui::GetFontSize() + framePaddingY * 2.0f;
+    const float barHeight = itemHeight + 2.0f;
+    const ImVec2 size = { itemHeight, itemHeight };
 
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AppColors::DarkGray);

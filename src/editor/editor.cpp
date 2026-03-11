@@ -698,7 +698,7 @@ void Editor::renderResourcePicker() {
                         itemId,
                         0,
                         hovered ? 8.0f : 0.0f,
-                        0.4f,
+                        0.25f,
                         iam_ease_preset(iam_ease_in_out_quad),
                         iam_policy_crossfade,
                         dt
