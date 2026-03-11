@@ -17,7 +17,7 @@ static bool IsRootOfOpenMenuSet()
     const ImGuiPopupData* upper_popup = &g.OpenPopupStack[g.BeginPopupStack.Size];
     if (window->DC.NavLayerCurrent != upper_popup->ParentNavLayer)
         return false;
-    return upper_popup->Window && (upper_popup->Window->Flags & ImGuiWindowFlags_ChildMenu) && ImGui::IsWindowChildOf(upper_popup->Window, window, true, false);
+    return upper_popup->Window && (upper_popup->Window->Flags & ImGuiWindowFlags_ChildMenu) && IsWindowChildOf(upper_popup->Window, window, true, false);
 }
 
 static bool MenuItemColor(const char* label, const char* icon, const char* shortcut, ImU32 iconTint, bool selected, bool enabled) {
@@ -75,8 +75,10 @@ static bool MenuItemColor(const char* label, const char* icon, const char* short
             RenderText(pos + ImVec2(offsets->OffsetLabel, 0.0f), label);
             if (icon_w > 0.0f)
             {
+                // Make sure all icons are centered in the icon column
+                const float icon_offset = (offsets->OffsetLabel - offsets->OffsetIcon - icon_w) * 0.5f;
                 if (iconTint != 0) PushStyleColor(ImGuiCol_Text, iconTint);
-                RenderText(pos + ImVec2(offsets->OffsetIcon, 0.0f), icon);
+                RenderText(pos + ImVec2(offsets->OffsetIcon + icon_offset, 0.0f), icon);
                 if (iconTint != 0) PopStyleColor();
             }
             if (shortcut_w > 0.0f)
