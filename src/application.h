@@ -5,6 +5,7 @@
 #include "editor/project_manager.h"
 #include "gfx/gl_texture.h"
 #include "version.h"
+#include "util/circular_buffer.h"
 
 #include <argparse/argparse.hpp>
 #include <SDL3/SDL_events.h>
@@ -253,6 +254,13 @@ private:
     std::string m_extractedBinaryPath;
 
     float m_idleAccumulator = 0.0f; // accumulate time to occasionally update particles while unfocused
+
+    // Performance Metrics
+    float m_history_secs = 10.0f;
+    float m_last_measurement = 0.0f;
+    float m_measurement_accum = 0.0f;
+    CircularBuffer<float, 1000> m_fps_buffer;
+    CircularBuffer<float, 1000> m_ft_buffer;
 };
 
 inline Application* g_application = nullptr;

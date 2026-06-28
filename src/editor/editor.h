@@ -151,12 +151,20 @@ private:
     EmitterSpawnType m_emitterSpawnType = EmitterSpawnType::SingleShot;
     float m_emitterInterval = 1.0f; // seconds
 
+    // Stats panel feedback animation
+    u32 m_emitterFlashColor = 0;
+    size_t m_lastEmitterCount = 0;
+
+    // Tracks last selection per editor to animate selection changes
+    std::unordered_map<u64, size_t> m_lastPickerSelection;
+
     static inline const u32 s_hoverAccentColor = ImGui::ColorConvertFloat4ToU32({ 0.7f, 0.3f, 0.7f, 1.0f });
     static constexpr glm::ivec2 s_gridDimensions = { 20, 20 };
     static constexpr glm::vec2 s_gridSpacing = { 1.0f, 1.0f };
 
     std::array<f32, 64> m_xAnimBuffer;
-    std::array<f32, 64> m_yAnimBuffer;
+    std::array<f32, 64> m_yAnimBuffer1;
+    std::array<f32, 64> m_yAnimBuffer2;
 
     TempTexture* m_tempTexture = nullptr;
     float m_tempTextureScale = 1.0f;

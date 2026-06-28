@@ -807,10 +807,10 @@ void Application::renderMenuBar() {
 
     const auto viewport = (ImGuiViewportP*)ImGui::GetMainViewport();
     constexpr auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-    constexpr float framePaddingY = 4.0f;
-    constexpr float itemHeight = 24.0f;
-    constexpr float barHeight = itemHeight + 2.0f;
-    constexpr ImVec2 size = { itemHeight, itemHeight };
+    const float framePaddingY = 4.0f;
+    const float itemHeight = ImGui::GetFontSize() + framePaddingY * 2.0f;
+    const float barHeight = itemHeight + 2.0f;
+    const ImVec2 size = { itemHeight, itemHeight };
 
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AppColors::DarkGray);
@@ -1118,9 +1118,47 @@ void Application::renderPreferences() {
 void Application::renderPerformanceWindow() {
     if (ImGui::Begin("Performance", &m_performanceWindowOpen)) {
         ImGui::SeparatorText("Application");
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("Delta Time: %.3f ms", m_deltaTime * 1000.0f);
-        ImGui::Text("Frame Time: %.3f ms", ImGui::GetIO().DeltaTime * 1000.0f);
+        const auto& io = ImGui::GetIO();
+        const auto fps = io.Framerate;
+        const auto dtMs = m_deltaTime * 1000.0f;
+        const auto ftMs = io.DeltaTime * 1000.0f;
+
+        ImGui::Text("FPS: %.1f", fps);
+        ImGui::Text("Delta Time: %.3f ms", dtMs);
+        ImGui::Text("Frame Time: %.3f ms", ftMs);
+
+        if (m_measurement_accum >= 0.02f) {
+            m_fps_buffer.push(fps);
+            m_ft_buffer.push(ftMs);
+            m_measurement_accum -= 0.02f;
+        }
+        m_measurement_accum += m_deltaTime;
+
+        ImGui::SliderFloat("History", &m_history_secs, 1.0f, 30.0f, "%.0f s");
+
+        const int maxSamples = static_cast<int>(m_history_secs / 0.02f);
+
+        if (ImPlot::BeginPlot("##FPS", { -1, 150 })) {
+            const int fpsCount = static_cast<int>(m_fps_buffer.size());
+            const int fpsOffset = static_cast<int>(m_fps_buffer.offset());
+            ImPlot::SetupAxes(nullptr, "FPS", ImPlotAxisFlags_NoTickLabels, ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxisLimits(ImAxis_X1, 0, maxSamples, ImPlotCond_Always);
+            ImPlotSpec spec;
+            spec.Offset = fpsOffset;
+            ImPlot::PlotLine("FPS", m_fps_buffer.data(), fpsCount, 1.0, 0, spec);
+            ImPlot::EndPlot();
+        }
+
+        if (ImPlot::BeginPlot("##FrameTime", {-1, 150})) {
+            const int ftCount = static_cast<int>(m_ft_buffer.size());
+            const int ftOffset = static_cast<int>(m_ft_buffer.offset());
+            ImPlot::SetupAxes(nullptr, "ms", ImPlotAxisFlags_NoTickLabels, ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxisLimits(ImAxis_X1, 0, maxSamples, ImPlotCond_Always);
+            ImPlotSpec spec;
+            spec.Offset = ftOffset;
+            ImPlot::PlotLine("Frame Time", m_ft_buffer.data(), ftCount, 1.0, 0, spec);
+            ImPlot::EndPlot();
+        }
 
         ImGui::SeparatorText("Current Editor");
         m_editor->renderStats();

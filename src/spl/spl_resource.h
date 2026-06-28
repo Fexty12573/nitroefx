@@ -474,6 +474,8 @@ struct SPLAlphaAnim final : SPLAnim {
 
     void apply(SPLParticle& ptcl, const SPLResource& resource, f32 lifeRate) const override;
     void plot(std::span<f32> xs, std::span<f32> ys) const;
+    void plotWith(std::span<f32> xs, std::span<f32> ys, float variance) const;
+    void plotWith(std::span<f32> xs, std::span<f32> ys, float variance, u8 factor) const;
 
     static SPLAlphaAnim createDefault() {
         return SPLAlphaAnim(

@@ -17,6 +17,7 @@
 #include <imgui.h>
 #include <implot.h>
 #include <imgui_internal.h>
+#include <im_anim.h>
 #include <tinyfiledialogs.h>
 #include <stb_image.h>
 #include <spng.h>
@@ -42,7 +43,7 @@ constexpr std::array s_emitterSpawnTypes = {
 }
 
 
-Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer() {
+Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer1() {
     m_gridRenderer = std::make_shared<GridRenderer>(s_gridDimensions, s_gridSpacing);
     m_debugRenderer = std::make_unique<DebugRenderer>(1000);
     m_collisionGridRenderer = std::make_shared<GridRenderer>(s_gridDimensions / 2, s_gridSpacing);
@@ -275,15 +276,44 @@ void Editor::renderStats() {
     const auto fraction = static_cast<float>(activeParticles) / maxParticles;
     const auto particleText = fmt::format("Particles: {}/{}", activeParticles, maxParticles);
 
-    constexpr auto colorLow = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-    constexpr auto colorHigh = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-    const auto color = glm::mix(colorLow, colorHigh, fraction);
+    constexpr u32 colorLow = IM_COL32(0, 200, 0, 255);
+    constexpr u32 colorHigh = IM_COL32(220, 0, 0, 255);
+    ImGui::AnimatedStatBar("##particleBar", fraction, particleText.c_str(), colorLow, colorHigh);
 
-    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4{ color.r, color.g, color.b, color.a });
-    ImGui::ProgressBar(fraction, ImVec2(0.0f, 0.0f), particleText.c_str());
-    ImGui::PopStyleColor();
-    
-    ImGui::Text("Active Emitters: %" PRIu64, system.getEmitters().size());
+    const auto emitterCount = system.getEmitters().size();
+    const float dt = ImGui::GetIO().DeltaTime;
+    const ImGuiID flashId = ImGui::GetID("##emitterFlash");
+
+    if (emitterCount != m_lastEmitterCount) {
+        m_emitterFlashColor = emitterCount > m_lastEmitterCount ? AppColors::LightGreen : AppColors::LightRed;
+        iam_tween_float(flashId, 0, 1.0f, 0.0f, iam_ease_preset(iam_ease_linear), iam_policy_cut, dt, 0.0f);
+        m_lastEmitterCount = emitterCount;
+    }
+
+    const float flash = iam_tween_float(
+        flashId, 0, 0.0f, 0.45f,
+        iam_ease_preset(iam_ease_out_cubic),
+        iam_policy_crossfade, dt, 0.0f
+    );
+
+    const auto emitterText = fmt::format("Active Emitters: {}", emitterCount);
+    if (flash > 0.001f && m_emitterFlashColor != 0) {
+        const auto& style = ImGui::GetStyle();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const ImVec2 ts = ImGui::CalcTextSize(emitterText.c_str());
+        const ImVec2 pad = { style.FramePadding.x, style.FramePadding.y * 0.5f };
+
+        ImVec4 hl = ImGui::ColorConvertU32ToFloat4(m_emitterFlashColor);
+        hl.w = flash * 0.35f;
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            p - pad,
+            { p.x + ts.x + pad.x, p.y + ts.y + pad.y },
+            ImGui::ColorConvertFloat4ToU32(hl),
+            style.FrameRounding
+        );
+    }
+
+    ImGui::TextUnformatted(emitterText.c_str());
 }
 
 void Editor::openPicker() {
@@ -327,12 +357,14 @@ void Editor::openSettings() {
     m_settingsOpen = true;
     ImGui::PushOverrideID(m_settingsWindowId);
     ImGui::OpenPopup("Settings##Editor");
+    ImGui::ResetPopupFade("Settings##Editor");
     ImGui::PopID();
 }
 
 void Editor::openTutorial() {
     ImGui::PushOverrideID(m_tutorialWindowId);
     ImGui::OpenPopup("##ViewportTutorial");
+    ImGui::ResetPopupFade("##ViewportTutorial");
     ImGui::PopID();
 }
 
@@ -592,6 +624,11 @@ void Editor::selectResource(u64 editorID, size_t resourceIndex) {
 void Editor::renderResourcePicker() {
     if (ImGui::Begin("Resource Picker##Editor", &m_pickerOpen)) {
 
+        const auto& style = ImGui::GetStyle();
+        constexpr float thumbnailSize = 48.0f;
+        constexpr ImVec2 thumbnailSizeVec = { thumbnailSize, thumbnailSize };
+        const float itemHeight = thumbnailSize + style.FramePadding.y * 2;
+
         const auto& editor = g_projectManager->getActiveEditor();
         if (!editor) {
             ImGui::Text("No editor open");
@@ -618,14 +655,33 @@ void Editor::renderResourcePicker() {
 
         const auto contentRegion = ImGui::GetContentRegionAvail();
         if (ImGui::BeginListBox("##Resources", contentRegion)) {
-            const ImGuiStyle& style = ImGui::GetStyle();
             const float itemWidth = contentRegion.x - (style.ItemSpacing.x + style.WindowPadding.x) * 1.3f;
+            const float dt = ImGui::GetIO().DeltaTime;
+
+            // Detect selection changes
+            const size_t selected = m_selectedResources[id];
+            const ImGuiID accentId = ImGui::GetID("##pickerAccent");
+            bool selectionChanged = false;
+            if (m_lastPickerSelection[id] != selected) {
+                m_lastPickerSelection[id] = selected;
+                selectionChanged = true;
+                iam_tween_float(accentId, 0, 0.0f, 0.0f, iam_ease_preset(iam_ease_linear), iam_policy_cut, dt, 0.0f);
+            }
+
+            const float accentGrow = iam_tween_float(
+                accentId, 0,
+                selected != (size_t)-1 ? 1.0f : 0.0f, 0.3f,
+                iam_ease_preset(iam_ease_out_cubic),
+                iam_policy_crossfade, dt, 0.0f
+            );
 
             for (size_t i = 0; i < resources.size(); ++i) {
                 const auto& resource = resources[i];
                 const auto& texture = textures[resource.header.misc.textureIndex];
 
                 ImGui::PushID(i);
+                const auto itemId = ImGui::GetID("##Resource");
+
                 const auto name = fmt::format("[{}] Tex {}x{}", i, texture.width, texture.height);
 
                 auto bgColor = m_selectedResources[id] == i
@@ -633,19 +689,37 @@ void Editor::renderResourcePicker() {
                     : style.Colors[ImGuiCol_Button];
 
                 const auto cursor = ImGui::GetCursorScreenPos();
-                if (ImGui::InvisibleButton("##Resource", { itemWidth, 32 })) {
+                if (ImGui::InvisibleButton("##Resource", { itemWidth, itemHeight })) {
                     m_selectedResources[id] = i;
                     editor->notifyResourceChanged(i);
                 }
 
-                if (ImGui::IsItemHovered()) {
-                    bgColor = style.Colors[ImGuiCol_ButtonHovered];
+                const bool hovered = ImGui::IsItemHovered();
+                const bool pressed = ImGui::IsItemActive();
+
+                if (hovered) {
                     anyHovered = true;
 
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                         ImGui::OpenPopup("##ResourcePopup");
                     }
                 }
+
+                const auto targetColor = pressed
+                    ? style.Colors[ImGuiCol_SliderGrabActive]
+                    : hovered ? style.Colors[ImGuiCol_ButtonHovered] : bgColor;
+
+                bgColor = iam_tween_color(
+                    itemId,
+                    1,
+                    targetColor,
+                    0.2f,
+                    iam_ease_preset(iam_ease_linear),
+                    iam_policy_crossfade,
+                    iam_col_srgb,
+                    dt,
+                    bgColor
+                );
 
                 const auto bgColor2 = bgColor * ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
 
@@ -654,7 +728,7 @@ void Editor::renderResourcePicker() {
                 const int firstVtx = drawList->VtxBuffer.Size;
                 drawList->AddRectFilled(
                     cursor, 
-                    { cursor.x + itemWidth, cursor.y + 32 },
+                    { cursor.x + itemWidth, cursor.y + itemHeight },
                     ImGui::ColorConvertFloat4ToU32(bgColor),
                     style.FrameRounding
                 );
@@ -662,19 +736,71 @@ void Editor::renderResourcePicker() {
 
                 ImGui::ShadeVertsLinearColorGradientKeepAlpha(drawList,
                     firstVtx, lastVtx,
-                    cursor, { cursor.x, cursor.y + 32 },
-                    ImGui::ColorConvertFloat4ToU32(bgColor), 
+                    cursor, { cursor.x, cursor.y + itemHeight },
+                    ImGui::ColorConvertFloat4ToU32(bgColor),
                     ImGui::ColorConvertFloat4ToU32(bgColor2)
                 );
 
-                ImGui::SetCursorScreenPos(cursor);
-                ImGui::Image((ImTextureID)(uintptr_t)texture.glTexture->getHandle(), { 32, 32 });
+                // Selection accent bar on the left edge, eased in on selection change
+                if (m_selectedResources[id] == i && accentGrow > 0.001f) {
+                    const float barHeight = itemHeight * accentGrow;
+                    const float barTop = cursor.y + (itemHeight - barHeight) * 0.5f;
+                    ImVec4 accent = ImGui::ColorConvertU32ToFloat4(AppColors::LightBlue);
+                    accent.w = accentGrow;
+                    drawList->AddRectFilled(
+                        { cursor.x, barTop },
+                        { cursor.x + 3.0f, barTop + barHeight },
+                        ImGui::ColorConvertFloat4ToU32(accent),
+                        1.5f
+                    );
+
+                    if (selectionChanged) {
+                        const float itemContentY = (cursor.y - ImGui::GetWindowPos().y) + ImGui::GetScrollY();
+                        const float targetScroll = itemContentY - ImGui::GetWindowHeight() * 0.5f + itemHeight * 0.5f;
+                        iam_scroll_to_y(targetScroll, 0.25f);
+                    }
+                }
+
+                const ImVec2 offset = {
+                    iam_tween_float(
+                        itemId,
+                        0,
+                        hovered ? 8.0f : 0.0f,
+                        0.25f,
+                        iam_ease_preset(iam_ease_in_out_quad),
+                        iam_policy_crossfade,
+                        dt
+                    ),
+                    0.0f
+                };
+
+                const auto imagePos = cursor + style.FramePadding + offset;
+                const auto frameMinPos = imagePos - ImVec2(2, 2);
+                const auto frameMaxPos = imagePos + ImVec2(thumbnailSize + 2, thumbnailSize + 2);
+                drawList->AddRectFilled(
+                    frameMinPos,
+                    frameMaxPos,
+                    IM_COL32(60, 60, 60, 255),
+                    2
+                );
+
+                drawList->AddRect(
+                    frameMinPos,
+                    frameMaxPos,
+                    IM_COL32(230, 230, 230, 30),
+                    2
+                );
+
+                ImGui::SetCursorScreenPos(imagePos);
+                ImGui::Image(texture.glTexture->getHandle(), thumbnailSizeVec);
 
                 ImGui::SameLine();
 
+                ImGui::PushFont(nullptr, Application::getFontSizeLarge());
                 const auto textHeight = ImGui::GetFontSize();
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (32 - textHeight) / 2.0f);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (thumbnailSize - textHeight) / 2.0f);
                 ImGui::TextUnformatted(name.c_str());
+                ImGui::PopFont();
 
                 if (ImGui::BeginPopup("##ResourcePopup")) {
                     if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy", "Ctrl+C", false, AppColors::LightGreen3)) {
@@ -719,6 +845,9 @@ void Editor::renderResourcePicker() {
 
                     ImGui::EndPopup();
                 }
+
+                ImGui::SetCursorScreenPos(cursor);
+                ImGui::Dummy({ itemWidth, itemHeight });
 
                 ImGui::PopID();
             }
@@ -1237,6 +1366,7 @@ void Editor::renderResourceEditor() {
 void Editor::renderSettings() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
     ImGui::PushOverrideID(m_settingsWindowId);
+    ImGui::BeginPopupFade("Settings##Editor");
 
     bool closedThroughButton = false;
     if (ImGui::BeginPopupModal("Settings##Editor", &m_settingsOpen)) {
@@ -1250,6 +1380,10 @@ void Editor::renderSettings() {
             ImGuiChildFlags_Borders,
             ImGuiWindowFlags_AlwaysVerticalScrollbar
         );
+
+        if (ImGui::IsWindowAppearing()) {
+            iam_scroll_to_top();
+        }
 
         ImGui::SeparatorText("General");
         ImGui::InputScalar("Max Particles", ImGuiDataType_U32, &m_settings.maxParticles);
@@ -1343,6 +1477,7 @@ void Editor::renderSettings() {
         m_settings = m_settingsBackup;
     }
 
+    ImGui::EndPopupFade();
     ImGui::PopID();
     ImGui::PopStyleVar();
 }
@@ -1350,6 +1485,7 @@ void Editor::renderSettings() {
 void Editor::renderTutorial() {
     ImGui::PushOverrideID(m_tutorialWindowId);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 16, 16 });
+    ImGui::BeginPopupFade("##ViewportTutorial");
 
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, { 0.5f, 0.5f });
     ImGui::SetNextWindowSize({ 900, 0 }, ImGuiCond_Once);
@@ -1476,6 +1612,7 @@ void Editor::renderTutorial() {
         ImGui::EndPopup();
     }
 
+    ImGui::EndPopupFade();
     ImGui::PopStyleVar();
     ImGui::PopID();
 }
@@ -1847,15 +1984,8 @@ void Editor::renderBehaviorEditor(SPLResource& res) {
 bool Editor::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavior>& gravity) {
     LOCK_EDITOR();
     static bool hovered = false;
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-    ImGui::BeginChild("##gravityEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginHoverBorderChild("##gravityEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Gravity");
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
 
     NOTIFY(ImGui::DragFloat3("Magnitude", glm::value_ptr(gravity->magnitude), 0.001f));
 
@@ -1868,15 +1998,8 @@ bool Editor::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavio
 bool Editor::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>& random) {
     LOCK_EDITOR();
     static bool hovered = false;
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-    ImGui::BeginChild("##randomEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginHoverBorderChild("##randomEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Random");
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
 
     NOTIFY(ImGui::DragFloat3("Magnitude", glm::value_ptr(random->magnitude), 0.001f));
     NOTIFY(ImGui::SliderFloat("Apply Interval", &random->applyInterval, 0, 5, "%.3fs", ImGuiSliderFlags_Logarithmic));
@@ -1890,15 +2013,8 @@ bool Editor::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>
 bool Editor::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>& magnet) {
     LOCK_EDITOR();
     static bool hovered = false;
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-    ImGui::BeginChild("##magnetEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginHoverBorderChild("##magnetEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Magnet");
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
 
     NOTIFY(ImGui::DragFloat3("Target", glm::value_ptr(magnet->target), 0.05f, -5.0f, 5.0f));
     NOTIFY(ImGui::SliderFloat("Force", &magnet->force, 0, 5, "%.3f", ImGuiSliderFlags_Logarithmic));
@@ -1912,15 +2028,8 @@ bool Editor::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>
 bool Editor::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& spin) {
     LOCK_EDITOR();
     static bool hovered = false;
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-    ImGui::BeginChild("##spinEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginHoverBorderChild("##spinEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Spin");
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
 
     NOTIFY(ImGui::SliderAngle("Angle", &spin->angle, -180.0f, 180.0f));
     ImGui::TextUnformatted("Axis");
@@ -1939,15 +2048,8 @@ bool Editor::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& sp
 bool Editor::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisionPlaneBehavior>& collisionPlane) {
     LOCK_EDITOR();
     static bool hovered = false;
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-    ImGui::BeginChild("##collisionPlaneEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginHoverBorderChild("##collisionPlaneEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Collision Plane");
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
 
     NOTIFY(ImGui::DragFloat("Height", &collisionPlane->y, 0.05f));
     NOTIFY(ImGui::SliderFloat("Elasticity", &collisionPlane->elasticity, 0, 2, "%.3f", ImGuiSliderFlags_Logarithmic));
@@ -1966,15 +2068,8 @@ bool Editor::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisi
 bool Editor::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenceBehavior>& convergence) {
     LOCK_EDITOR();
     static bool hovered = false;
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-    ImGui::BeginChild("##convergenceEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginHoverBorderChild("##convergenceEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Convergence");
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
 
     NOTIFY(ImGui::DragFloat3("Target", glm::value_ptr(convergence->target), 0.05f, -5.0f, 5.0f));
     NOTIFY(ImGui::SliderFloat("Force", &convergence->force, -5, 5, "%.3f", ImGuiSliderFlags_Logarithmic));
@@ -2054,15 +2149,7 @@ bool Editor::renderScaleAnimEditor(SPLScaleAnim& res) {
         return false;
     }
 
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-
-    ImGui::BeginChild("##scaleAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
+    ImGui::BeginHoverBorderChild("##scaleAnimEditor", hovered, s_hoverAccentColor);
 
     NOTIFY(ImGui::SliderFloat("Start Scale", &res.start, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_Logarithmic));
     NOTIFY(ImGui::SliderFloat("Mid Scale", &res.mid, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_Logarithmic));
@@ -2073,10 +2160,10 @@ bool Editor::renderScaleAnimEditor(SPLScaleAnim& res) {
     NOTIFY(ImGui::SliderScalar("Out", ImGuiDataType_U8, &res.curve.out, &min, &max, "%u"));
     NOTIFY(ImGui::Checkbox("Loop", &res.flags.loop));
 
-    res.plot(m_xAnimBuffer, m_yAnimBuffer);
+    res.plot(m_xAnimBuffer, m_yAnimBuffer1);
     if (ImPlot::BeginPlot("##scaleAnimPlot", {-1, 0}, ImPlotFlags_CanvasOnly)) {
         ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-        ImPlot::PlotLine("Scale", m_xAnimBuffer.data(), m_yAnimBuffer.data(), m_xAnimBuffer.size());
+        ImPlot::PlotLine("Scale", m_xAnimBuffer.data(), m_yAnimBuffer1.data(), m_xAnimBuffer.size());
         ImPlot::EndPlot();
     }
 
@@ -2106,15 +2193,7 @@ bool Editor::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res
         return false;
     }
 
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-
-    ImGui::BeginChild("##colorAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
+    ImGui::BeginHoverBorderChild("##colorAnimEditor", hovered, s_hoverAccentColor);
 
     NOTIFY(ImGui::ColorEdit3("Start Color", glm::value_ptr(res.start)));
     NOTIFY(ImGui::ColorEdit3("End Color", glm::value_ptr(res.end)));
@@ -2223,15 +2302,7 @@ bool Editor::renderAlphaAnimEditor(SPLAlphaAnim& res) {
         return false;
     }
 
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-
-    ImGui::BeginChild("##alphaAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
+    ImGui::BeginHoverBorderChild("##alphaAnimEditor", hovered, s_hoverAccentColor);
 
     NOTIFY(ImGui::SliderFloat("Start Alpha", &res.alpha.start, 0, 1));
     NOTIFY(ImGui::SliderFloat("Mid Alpha", &res.alpha.mid, 0, 1));
@@ -2251,12 +2322,27 @@ bool Editor::renderAlphaAnimEditor(SPLAlphaAnim& res) {
     NOTIFY(ImGui::SliderFloat("Random Range", &res.flags.randomRange, 0, 1));
     NOTIFY(ImGui::Checkbox("Loop", &res.flags.loop));
 
-    res.plot(m_xAnimBuffer, m_yAnimBuffer);
+    res.plotWith(m_xAnimBuffer, m_yAnimBuffer1, 0.0f);
 
     if (ImPlot::BeginPlot("##alphaAnimPlot", {-1, 0}, ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
         ImPlot::SetupAxisLimits(ImAxis_X1, 0, 1);
         ImPlot::SetupAxisLimits(ImAxis_Y1, minAlpha, maxAlpha);
-        ImPlot::PlotLine("Alpha", m_xAnimBuffer.data(), m_yAnimBuffer.data(), m_xAnimBuffer.size());
+        
+        if (res.flags.randomRange > 0) {
+            res.plotWith(m_xAnimBuffer, m_yAnimBuffer2, res.flags.randomRange, 255);
+            ImPlot::PlotLine("Alpha Base", m_xAnimBuffer.data(), m_yAnimBuffer1.data(), m_xAnimBuffer.size());
+            ImPlot::PlotShaded(
+                "Alpha Variance",
+                m_xAnimBuffer.data(),
+                m_yAnimBuffer2.data(),
+                m_yAnimBuffer1.data(),
+                m_xAnimBuffer.size(),
+                ImPlotSpec{ ImPlotProp_FillAlpha, 0.25f }
+            );
+        } else {
+            ImPlot::PlotLine("Alpha", m_xAnimBuffer.data(), m_yAnimBuffer1.data(), m_xAnimBuffer.size());
+        }
+
         ImPlot::EndPlot();
     }
 
@@ -2286,15 +2372,7 @@ bool Editor::renderTexAnimEditor(SPLTexAnim& res) {
         return false;
     }
 
-    if (hovered) {
-        ImGui::PushStyleColor(ImGuiCol_Border, s_hoverAccentColor);
-    }
-
-    ImGui::BeginChild("##texAnimEditor", {}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-
-    if (hovered) {
-        ImGui::PopStyleColor();
-    }
+    ImGui::BeginHoverBorderChild("##texAnimEditor", hovered, s_hoverAccentColor);
 
     NOTIFY(ImGui::SliderFloat("Step", &res.param.step, 0.01f, 1.0f));
     HELP(texAnimStep);

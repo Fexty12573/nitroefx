@@ -1,6 +1,7 @@
 #include "extensions.h"
 
 #include <imgui_internal.h>
+#include <im_anim.h>
 #include <utility>
 
 namespace ImGui {
@@ -16,7 +17,7 @@ static bool IsRootOfOpenMenuSet()
     const ImGuiPopupData* upper_popup = &g.OpenPopupStack[g.BeginPopupStack.Size];
     if (window->DC.NavLayerCurrent != upper_popup->ParentNavLayer)
         return false;
-    return upper_popup->Window && (upper_popup->Window->Flags & ImGuiWindowFlags_ChildMenu) && ImGui::IsWindowChildOf(upper_popup->Window, window, true, false);
+    return upper_popup->Window && (upper_popup->Window->Flags & ImGuiWindowFlags_ChildMenu) && IsWindowChildOf(upper_popup->Window, window, true, false);
 }
 
 static bool MenuItemColor(const char* label, const char* icon, const char* shortcut, ImU32 iconTint, bool selected, bool enabled) {
@@ -74,8 +75,10 @@ static bool MenuItemColor(const char* label, const char* icon, const char* short
             RenderText(pos + ImVec2(offsets->OffsetLabel, 0.0f), label);
             if (icon_w > 0.0f)
             {
+                // Make sure all icons are centered in the icon column
+                const float icon_offset = (offsets->OffsetLabel - offsets->OffsetIcon - icon_w) * 0.5f;
                 if (iconTint != 0) PushStyleColor(ImGuiCol_Text, iconTint);
-                RenderText(pos + ImVec2(offsets->OffsetIcon, 0.0f), icon);
+                RenderText(pos + ImVec2(offsets->OffsetIcon + icon_offset, 0.0f), icon);
                 if (iconTint != 0) PopStyleColor();
             }
             if (shortcut_w > 0.0f)
@@ -226,25 +229,85 @@ void ImGui::VerticalSeparator(float height) {
 }
 
 bool ImGui::IconButton(const char* icon, const ImVec2& size, ImU32 tint, bool enabled) {
-    ImGui::BeginDisabled(!enabled);
+    BeginDisabled(!enabled);
+
+    ImGuiWindow* window = GetCurrentWindow();
+    if (window->SkipItems) {
+        EndDisabled();
+        return false;
+    }
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID(icon);
+
+    const ImVec2 icon_size = CalcTextSize(icon);
+    const ImVec2 pos = window->DC.CursorPos;
+    const ImVec2 item_size = CalcItemSize(size, icon_size.x + style.FramePadding.x * 2.0f, icon_size.y + style.FramePadding.y * 2.0f);
+
+    const ImRect bb(pos, pos + item_size);
+    ItemSize(item_size, style.FramePadding.y);
+    if (!ItemAdd(bb, id)) {
+        EndDisabled();
+        return false;
+    }
+
+    bool hovered, held;
+    bool pressed = ButtonBehavior(bb, id, &hovered, &held);
+
+    // Render button frame
+    const ImU32 col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+    RenderNavCursor(bb, id);
+    RenderFrame(bb.Min, bb.Max, col, true, style.FrameRounding);
+
+    if (g.LogEnabled)
+        LogSetNextTextDecoration("[", "]");
+
+    // Animate icon scale on hover/active (scales from center)
+    const float target_scale = (held && hovered) ? 0.9f : hovered ? 1.2f : 1.0f;
+    const float icon_scale = iam_tween_float(
+        id,
+        ImHashStr("icon_scale"),
+        target_scale,
+        0.07f,
+        iam_ease_preset(iam_ease_linear),
+        iam_policy_crossfade,
+        g.IO.DeltaTime,
+        1.0f
+    );
+
+    const float scaled_font_size = g.FontSizeBase * icon_scale;
+    const ImVec2 button_center = ImVec2((bb.Min.x + bb.Max.x) * 0.5f, (bb.Min.y + bb.Max.y) * 0.5f);
+
+    // Measure icon at the actual scaled font size for accurate centering
+    PushFont(g.Font, scaled_font_size);
+
+    const ImVec2 scaled_icon_size = CalcTextSize(icon);
+    const ImVec2 icon_pos = ImVec2(
+        ImFloor(button_center.x - scaled_icon_size.x * 0.5f),
+        ImFloor(button_center.y - scaled_icon_size.y * 0.5f)
+    );
+
     if (tint != 0) {
         if (enabled) {
-            ImGui::PushStyleColor(ImGuiCol_Text, tint);
+            PushStyleColor(ImGuiCol_Text, tint);
         } else {
-            const auto disabledTint = ImGui::ColorConvertU32ToFloat4(tint) * ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_TextDisabled, disabledTint);
+            const auto disabledTint = ColorConvertU32ToFloat4(tint) * ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+            PushStyleColor(ImGuiCol_Text, disabledTint);
         }
     }
 
-    const bool clicked = ImGui::Button(icon, size);
+    window->DrawList->AddText(icon_pos, GetColorU32(ImGuiCol_Text), icon);
+    
+    PopFont();
 
     if (tint != 0) {
-        ImGui::PopStyleColor();
+        PopStyleColor();
     }
 
-    ImGui::EndDisabled();
+    EndDisabled();
 
-    return clicked;
+    return pressed;
 }
 
 bool ImGui::IconButton(const char* icon, const char* text, ImU32 iconTint, bool enabled) {
@@ -307,9 +370,36 @@ bool ImGui::IconButton(const char* icon, const char* text, ImU32 iconTint, bool 
     ImVec2 icon_pos = ImVec2(bb.Min.x + style.FramePadding.x, icon_y);
     ImVec2 text_pos = ImVec2(icon_pos.x + icon_size.x + spacing, text_y);
 
+    // Animate icon scale on hover/active
+    const float target_scale = (held && hovered) ? 0.9f : hovered ? 1.2f : 1.0f;
+    const float icon_scale = iam_tween_float(
+        id,
+        ImHashStr("icon_scale"),
+        target_scale,
+        0.07f,
+        iam_ease_preset(iam_ease_linear),
+        iam_policy_crossfade,
+        g.IO.DeltaTime,
+        1.0f
+    );
+
+    const float scaled_font_size = g.FontSizeBase * icon_scale;
+    const ImVec2 icon_center = ImVec2(icon_pos.x + icon_size.x * 0.5f, icon_pos.y + icon_size.y * 0.5f);
+
+    // Measure icon at the actual scaled font size for accurate centering
+    PushFont(g.Font, scaled_font_size);
+
+    const ImVec2 scaled_icon_size = CalcTextSize(icon);
+    const ImVec2 scaled_icon_pos = ImVec2(
+        ImFloor(icon_center.x - scaled_icon_size.x * 0.5f),
+        ImFloor(icon_center.y - scaled_icon_size.y * 0.5f)
+    );
+
     if (iconTint != 0) PushStyleColor(ImGuiCol_Text, iconTint);
-    window->DrawList->AddText(icon_pos, GetColorU32(ImGuiCol_Text), icon);
+    window->DrawList->AddText(scaled_icon_pos, GetColorU32(ImGuiCol_Text), icon);
     if (iconTint != 0) PopStyleColor();
+
+    PopFont();
 
     window->DrawList->AddText(text_pos, GetColorU32(ImGuiCol_Text), text);
 
@@ -318,6 +408,115 @@ bool ImGui::IconButton(const char* icon, const char* text, ImU32 iconTint, bool 
     EndDisabled();
 
     return pressed;
+}
+
+bool ImGui::BeginHoverBorderChild(const char* str_id, bool hovered, ImU32 accent, ImGuiChildFlags flags) {
+    const ImGuiID id = GetID(str_id);
+    const ImVec4 normal = GetStyleColorVec4(ImGuiCol_Border);
+    const ImVec4 target = hovered ? ColorConvertU32ToFloat4(accent) : normal;
+
+    const ImVec4 col = iam_tween_color(
+        id, 0, target, 0.18f,
+        iam_ease_preset(iam_ease_out_cubic),
+        iam_policy_crossfade, iam_col_oklab,
+        GetIO().DeltaTime, normal
+    );
+
+    PushStyleColor(ImGuiCol_Border, col);
+    const bool open = BeginChild(str_id, ImVec2(0, 0), flags);
+    PopStyleColor();
+    return open;
+}
+
+void ImGui::AnimatedStatBar(const char* str_id, float fraction, const char* overlay, ImU32 lowColor, ImU32 highColor) {
+    ImGuiWindow* window = GetCurrentWindow();
+    if (window->SkipItems)
+        return;
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID(str_id);
+    const float dt = g.IO.DeltaTime;
+
+    const ImVec2 pos = window->DC.CursorPos;
+    const ImVec2 size = CalcItemSize(ImVec2(0.0f, 0.0f), CalcItemWidth(), g.FontSize + style.FramePadding.y * 2.0f);
+    const ImRect bb(pos, pos + size);
+    ItemSize(size, style.FramePadding.y);
+    if (!ItemAdd(bb, id))
+        return;
+
+    fraction = ImSaturate(fraction);
+
+    // Ease the displayed fraction so the fill glides instead of snapping each frame
+    const float shown = ImSaturate(iam_tween_float(
+        id, 0, fraction, 0.25f,
+        iam_ease_preset(iam_ease_out_cubic),
+        iam_policy_crossfade, dt, fraction
+    ));
+
+    // Blend low -> high in OKLAB based on the eased value
+    ImVec4 fill = iam_get_blended_color(
+        ColorConvertU32ToFloat4(lowColor),
+        ColorConvertU32ToFloat4(highColor),
+        shown, iam_col_oklab
+    );
+
+    // Gentle brightness pulse when near full
+    if (fraction > 0.9f) {
+        const float pulse = iam_oscillate(id, 0.10f, 2.0f, iam_wave_sine, 0.0f, dt);
+        fill.x = ImSaturate(fill.x + pulse);
+        fill.y = ImSaturate(fill.y + pulse);
+        fill.z = ImSaturate(fill.z + pulse);
+    }
+
+    RenderFrame(bb.Min, bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
+
+    const float fillWidth = shown * bb.GetWidth();
+    if (fillWidth > 0.0f) {
+        const ImVec2 fillMax(bb.Min.x + fillWidth, bb.Max.y);
+        const ImU32 fillTop = ColorConvertFloat4ToU32(fill);
+        const ImU32 fillBot = ColorConvertFloat4ToU32(fill * ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+        const int v0 = window->DrawList->VtxBuffer.Size;
+        window->DrawList->AddRectFilled(bb.Min, fillMax, fillTop, style.FrameRounding);
+        const int v1 = window->DrawList->VtxBuffer.Size;
+        ShadeVertsLinearColorGradientKeepAlpha(window->DrawList, v0, v1, bb.Min, bb.GetBL(), fillTop, fillBot);
+    }
+
+    if (overlay && overlay[0]) {
+        const ImVec2 overlaySize = CalcTextSize(overlay, NULL);
+        RenderTextClipped(bb.Min, bb.Max, overlay, NULL, &overlaySize, ImVec2(0.5f, 0.5f), &bb);
+    }
+}
+
+void ImGui::BeginPopupFade(const char* str_id) {
+    ImGuiContext& g = *GImGui;
+    const ImGuiID id = GetID(str_id);
+    const bool open = IsPopupOpen(str_id, ImGuiPopupFlags_None);
+
+    float a = 1.0f;
+    if (open) {
+        a = iam_tween_float(
+            id, 0, 1.0f, 0.15f,
+            iam_ease_preset(iam_ease_out_cubic),
+            iam_policy_crossfade, g.IO.DeltaTime, 0.0f
+        );
+    }
+
+    PushStyleVar(ImGuiStyleVar_Alpha, a * g.Style.Alpha);
+}
+
+void ImGui::EndPopupFade() {
+    PopStyleVar();
+}
+
+void ImGui::ResetPopupFade(const char* str_id) {
+    const ImGuiID id = GetID(str_id);
+    // Snap the channel to 0 so the next BeginPopupFade fades in from fully transparent
+    iam_tween_float(
+        id, 0, 0.0f, 0.0f,
+        iam_ease_preset(iam_ease_linear),
+        iam_policy_cut, GetIO().DeltaTime, 0.0f
+    );
 }
 
 bool ImGui::CenteredButton(const char* label, float alignment) {
