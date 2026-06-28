@@ -46,9 +46,6 @@ set(EXTERNAL_SOURCES
 
     # ImAnim
     external/ImAnim/im_anim.cpp
-    external/ImAnim/im_anim_demo.cpp
-    external/ImAnim/im_anim_doc.cpp
-    external/ImAnim/im_anim_usecase.cpp
 
     # ImPlot
     external/implot/implot.cpp
