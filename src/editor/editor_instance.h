@@ -11,6 +11,8 @@
 #include "gfx/gl_texture.h"
 #include "particle_system.h"
 #include "renderer.h"
+#include "debug_renderer.h"
+#include "grid_renderer.h"
 #include "editor_history.h"
 #include "spl/spl_archive.h"
 #include "spl/spl_resource.h"
@@ -32,6 +34,7 @@ public:
 
     std::pair<bool, bool> render() override;
     void renderParticles(const std::vector<Renderer*>& renderers);
+    void renderDebugShapes(std::vector<Renderer*>& renderers);
     void update(float deltaTime) override;
     [[nodiscard]] bool isAnimating() const override {
         return !m_particleSystem.getEmitters().empty();
@@ -160,6 +163,8 @@ public:
     }
 
 private:
+    void createRenderers();
+
     void renderHeaderEditor(SPLResourceHeader& header);
     void renderBehaviorEditor(SPLResource& res);
     bool renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavior>& gravity);
@@ -217,6 +222,8 @@ private:
     SPLArchive m_archive;
     GLViewport m_viewport = GLViewport({800, 600});
     ParticleSystem m_particleSystem;
+    std::unique_ptr<DebugRenderer> m_debugRenderer;
+    std::shared_ptr<GridRenderer> m_collisionGridRenderer;
     Camera m_camera;
     EditorHistory m_history;
 

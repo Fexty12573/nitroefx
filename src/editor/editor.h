@@ -2,7 +2,6 @@
 #include "spl/spl_resource.h"
 #include "editor_instance.h"
 #include "editor_settings.h"
-#include "debug_renderer.h"
 #include "grid_renderer.h"
 #include <types.h>
 
@@ -80,8 +79,6 @@ private:
 
     void updateRenderSettings(bool swapRenderer = false);
 
-    void renderDebugShapes(const std::shared_ptr<EditorInstance>& editor, std::vector<Renderer*>& renderers);
-
     void updateMaxParticles();
 
 private:
@@ -103,8 +100,6 @@ private:
     static constexpr glm::vec2 s_gridSpacing = { 1.0f, 1.0f };
 
     std::shared_ptr<GridRenderer> m_gridRenderer;
-    std::unique_ptr<DebugRenderer> m_debugRenderer;
-    std::shared_ptr<GridRenderer> m_collisionGridRenderer;
 
     std::queue<SPLResourceCopy> m_clipboardHistory;
 };
