@@ -24,12 +24,7 @@
 #include <libimagequant.h>
 #include <SDL3/SDL_misc.h>
 
-
-// FIXME: Remove all this
-#define LOCKED_EDITOR() this
-#define LOCK_EDITOR() ((void)0)
 #define NOTIFY(action) this->valueChanged(action)
-#define PUSH_HISTORY() this->pushHistory()
 #define HELP(name) helpPopup(help::name)
 
 
@@ -1498,8 +1493,6 @@ void Editor::updateRenderSettings(bool swapRenderer) {
 }
 
 void EditorInstance::renderHeaderEditor(SPLResourceHeader& header) {
-    LOCK_EDITOR();
-
     auto& flags = header.flags;
     auto& misc = header.misc;
     constexpr f32 frameTime = 1.0f / (f32)SPLArchive::SPL_FRAMES_PER_SECOND;
@@ -1600,7 +1593,7 @@ void EditorInstance::renderHeaderEditor(SPLResourceHeader& header) {
         }
         HELP(drawType);
 
-        const auto& textures = LOCKED_EDITOR()->getArchive().getTextures();
+        const auto& textures = m_archive.getTextures();
         if (ImGui::ImageButton("##tex", (ImTextureID)textures[header.misc.textureIndex].glTexture->getHandle(), {32, 32})) {
             ImGui::OpenPopup(ImGui::GetID("##texturePicker"));
         }
@@ -1757,7 +1750,6 @@ void EditorInstance::renderHeaderEditor(SPLResourceHeader& header) {
 }
 
 void EditorInstance::renderBehaviorEditor(SPLResource& res) {
-    LOCK_EDITOR();
     std::vector<std::shared_ptr<SPLBehavior>> toRemove;
 
     if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS, "Add Behavior...", AppColors::Turquoise)) {
@@ -1841,7 +1833,6 @@ void EditorInstance::renderBehaviorEditor(SPLResource& res) {
 }
 
 bool EditorInstance::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavior>& gravity) {
-    LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##gravityEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Gravity");
@@ -1855,7 +1846,6 @@ bool EditorInstance::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravit
 }
 
 bool EditorInstance::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>& random) {
-    LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##randomEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Random");
@@ -1870,7 +1860,6 @@ bool EditorInstance::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomB
 }
 
 bool EditorInstance::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>& magnet) {
-    LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##magnetEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Magnet");
@@ -1885,7 +1874,6 @@ bool EditorInstance::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetB
 }
 
 bool EditorInstance::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& spin) {
-    LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##spinEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Spin");
@@ -1905,7 +1893,6 @@ bool EditorInstance::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehav
 }
 
 bool EditorInstance::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisionPlaneBehavior>& collisionPlane) {
-    LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##collisionPlaneEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Collision Plane");
@@ -1925,7 +1912,6 @@ bool EditorInstance::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SP
 }
 
 bool EditorInstance::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenceBehavior>& convergence) {
-    LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##convergenceEditor", hovered, s_hoverAccentColor);
     ImGui::TextUnformatted("Convergence");
@@ -1940,8 +1926,6 @@ bool EditorInstance::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLCo
 }
 
 void EditorInstance::renderAnimationEditor(SPLResource& res) {
-    LOCK_EDITOR();
-
     if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS , "Add Animation...", AppColors::Turquoise)) {
         ImGui::OpenPopup("##addAnimation");
     }
@@ -1996,8 +1980,6 @@ void EditorInstance::renderAnimationEditor(SPLResource& res) {
 }
 
 bool EditorInstance::renderScaleAnimEditor(SPLScaleAnim& res) {
-    LOCK_EDITOR();
-
     static bool hovered = false;
 
     if (!ImGui::CollapsingHeader("Scale Animation")) {
@@ -2040,8 +2022,6 @@ bool EditorInstance::renderScaleAnimEditor(SPLScaleAnim& res) {
 }
 
 bool EditorInstance::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res) {
-    LOCK_EDITOR();
-
     static bool hovered = false;
 
     if (!ImGui::CollapsingHeader("Color Animation")) {
@@ -2149,8 +2129,6 @@ bool EditorInstance::renderColorAnimEditor(const SPLResource& mainRes, SPLColorA
 }
 
 bool EditorInstance::renderAlphaAnimEditor(SPLAlphaAnim& res) {
-    LOCK_EDITOR();
-
     static bool hovered = false;
 
     if (!ImGui::CollapsingHeader("Alpha Animation")) {
@@ -2219,8 +2197,6 @@ bool EditorInstance::renderAlphaAnimEditor(SPLAlphaAnim& res) {
 }
 
 bool EditorInstance::renderTexAnimEditor(SPLTexAnim& res) {
-    LOCK_EDITOR();
-
     static bool hovered = false;
 
     if (!ImGui::CollapsingHeader("Texture Animation")) {
@@ -2240,7 +2216,7 @@ bool EditorInstance::renderTexAnimEditor(SPLTexAnim& res) {
 
     ImGui::SeparatorText("Textures");
 
-    const auto& textures = LOCKED_EDITOR()->getArchive().getTextures();
+    const auto& textures = m_archive.getTextures();
     const auto popupId = ImGui::GetID("##texAnimTexturePicker");
     bool buttonContextOpened = false;
     static size_t selectedTexture = 0;
@@ -2308,8 +2284,6 @@ bool EditorInstance::renderTexAnimEditor(SPLTexAnim& res) {
 }
 
 void EditorInstance::renderChildrenEditor(SPLResource& res) {
-    LOCK_EDITOR();
-
     if (!res.childResource) {
         ImGui::TextUnformatted("This resource does not have an associated child resource.");
         if (ImGui::IconButton(ICON_FA_PLUS, "Add Child Resource", AppColors::Turquoise)) {
@@ -2345,7 +2319,7 @@ void EditorInstance::renderChildrenEditor(SPLResource& res) {
                 }
             };
 
-            PUSH_HISTORY();
+            pushHistory();
         }
 
         return;
@@ -2357,7 +2331,7 @@ void EditorInstance::renderChildrenEditor(SPLResource& res) {
     if (NOTIFY(ImGui::IconButton(ICON_FA_XMARK, "Remove Child Resource", AppColors::LightRed))) {
         res.header.flags.hasChildResource = false;
         res.childResource.reset();
-        PUSH_HISTORY();
+        pushHistory();
         return;
     }
 
@@ -2404,7 +2378,7 @@ void EditorInstance::renderChildrenEditor(SPLResource& res) {
         }
         HELP(drawType);
 
-        const auto& textures = LOCKED_EDITOR()->getArchive().getTextures();
+        const auto& textures = m_archive.getTextures();
         if (ImGui::ImageButton("##tex", (ImTextureID)textures[misc.texture].glTexture->getHandle(), {32, 32})) {
             ImGui::OpenPopup("##childTexturePicker");
         }
