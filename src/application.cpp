@@ -1161,7 +1161,9 @@ void Application::renderPerformanceWindow() {
         }
 
         ImGui::SeparatorText("Current Editor");
-        m_editor->renderStats();
+        if (const auto& editor = g_projectManager->getActiveEditor()) {
+            editor->renderStats();
+        }
     }
 
     ImGui::End();
@@ -1835,12 +1837,12 @@ void Application::executeAction(u32 action) {
         break;
     case ApplicationAction::Undo:
         if (g_projectManager->hasActiveEditor()) {
-            g_projectManager->getActiveEditor()->undo();
+            m_editor->undo();
         }
         break;
     case ApplicationAction::Redo:
         if (g_projectManager->hasActiveEditor()) {
-            g_projectManager->getActiveEditor()->redo();
+            m_editor->redo();
         }
         break;
     case ApplicationAction::Exit:
@@ -2967,8 +2969,7 @@ bool Application::gunzipFile(const std::filesystem::path& srcPath, std::vector<u
 
 bool Application::hasActiveEmitters() const {
     if (!g_projectManager) return false;
-    if (!g_projectManager->hasActiveEditor()) return false;
-    const auto editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) return false;
     // If any emitters exist we treat as active animation
     return !editor->getParticleSystem().getEmitters().empty();

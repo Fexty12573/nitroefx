@@ -11,26 +11,33 @@
 #include "renderer.h"
 #include "editor_history.h"
 #include "spl/spl_archive.h"
+#include "base_editor.h"
 
 
-class EditorInstance {
+class EditorInstance : public BaseEditor {
 public:
     explicit EditorInstance(const std::filesystem::path& path, bool isTemp = false, bool isRecovered = false);
     explicit EditorInstance(std::string name, size_t narcIndex, std::span<const u8> data, bool isTemp = false);
-    EditorInstance(bool isTemp = false);
+    explicit EditorInstance(bool isTemp = false);
 
-    std::pair<bool, bool> render();
+    std::pair<bool, bool> render() override;
     void renderParticles(const std::vector<Renderer*>& renderers);
-    void updateParticles(float deltaTime);
-    void handleEvent(const SDL_Event& event);
+    void update(float deltaTime) override;
+    [[nodiscard]] bool isAnimating() const override {
+        return !m_particleSystem.getEmitters().empty();
+    }
+    void handleEvent(const SDL_Event& event) override;
+
+    void renderStats() override;
 
     void useModernRenderer();
     void useLegacyRenderer();
 
-    bool notifyClosing();
+    [[nodiscard]] bool notifyClosing() override;
     void notifyResourceChanged(size_t index);
     bool valueChanged(bool changed);
-    bool isModified() const {
+
+    [[nodiscard]] bool isModified() const override {
         return m_modified;
     }
 
@@ -38,19 +45,23 @@ public:
         m_particleSystem.setMaxParticles(maxParticles);
     }
 
-    void makePermanent() {
+    void makePermanent() override {
         m_isTemp = false;
     }
 
-    bool isTemp() const {
+    [[nodiscard]] bool isTemp() const override {
         return m_isTemp;
     }
 
-    bool isRecovered() const {
+    [[nodiscard]] bool isRecovered() const override {
         return m_isRecovered;
     }
 
-    bool isNarc() const {
+    [[nodiscard]] EditorType getType() const override {
+        return EditorType::Particle;
+    }
+
+    [[nodiscard]] bool isNarc() const {
         return m_narcIndex != std::numeric_limits<size_t>::max();
     }
 
@@ -58,10 +69,10 @@ public:
     void deleteResource(size_t index);
     void addResource();
 
-    void save();
-    void saveAs(const std::filesystem::path& path);
+    void save() override;
+    void saveAs(const std::filesystem::path& path) override;
     void saveTo(const std::filesystem::path& path);
-    void saveBackup();
+    void saveBackup() override;
 
     void pushHistory();
 
@@ -79,31 +90,31 @@ public:
     std::filesystem::path getRelativePath() const;
     std::filesystem::path getBackupPath() const;
 
-    std::string getName() const;
+    [[nodiscard]] std::string getName() const override;
 
     void rename(const std::filesystem::path& to) {
         m_path = to;
     }
 
-    void rename(const std::string& to) {
+    void rename(std::string_view to) override {
         if (isNarc()) {
             m_narcMemberName = to;
         }
     }
 
-    const std::filesystem::path& getPath() const {
+    [[nodiscard]] const std::filesystem::path& getPath() const override {
         return m_path;
     }
 
-    size_t getNarcIndex() const {
-        return m_narcIndex;
+    [[nodiscard]] std::optional<size_t> getNarcIndex() const override {
+        return isNarc() ? std::optional<size_t>{ m_narcIndex } : std::nullopt;
     }
 
     SPLArchive& getArchive() {
         return m_archive;
     }
 
-    u64 getUniqueID() const {
+    [[nodiscard]] u64 getUniqueID() const override {
         return m_uniqueID;
     }
 
@@ -119,31 +130,35 @@ public:
         m_updateProj = true;
     }
 
-    using Clock = std::chrono::steady_clock;
-
-    std::chrono::time_point<Clock> getLastBackupTime() const {
+    [[nodiscard]] Clock::time_point getLastBackupTime() const override {
         return m_lastBackupTime;
     }
 
 private:
+    static constexpr auto INVALID_RESOURCE = std::numeric_limits<size_t>::max();
+
     std::filesystem::path m_path;
     size_t m_narcIndex = -1;
     std::string m_narcMemberName;
     SPLArchive m_archive;
-    GLViewport m_viewport = GLViewport({ 800, 600 });
+    GLViewport m_viewport = GLViewport({800, 600});
     ParticleSystem m_particleSystem;
     Camera m_camera;
     EditorHistory m_history;
 
-    std::chrono::time_point<Clock> m_lastBackupTime;
+    Clock::time_point m_lastBackupTime;
 
-    size_t m_selectedResource = -1;
+    size_t m_selectedResource = INVALID_RESOURCE;
     SPLResource m_resourceBefore;
 
-    glm::vec2 m_size = { 800, 600 };
+    // Stats panel feedback animation
+    u32 m_emitterFlashColor = 0;
+    size_t m_lastEmitterCount = 0;
+
+    glm::vec2 m_size = {800, 600};
+    u64 m_uniqueID;
     bool m_updateProj;
     bool m_isTemp = false;
     bool m_modified = false; // Has the file been modified?
     bool m_isRecovered = false; // Was this instance recovered from a backup?
-    u64 m_uniqueID;
 };

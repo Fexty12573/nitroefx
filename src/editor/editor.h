@@ -29,7 +29,6 @@ public:
     void renderParticles();
     void renderMenu(std::string_view name);
     void renderToolbar(float itemHeight);
-    void renderStats();
     void openPicker();
     void openEditor();
     void openTextureManager();
@@ -150,10 +149,6 @@ private:
 
     EmitterSpawnType m_emitterSpawnType = EmitterSpawnType::SingleShot;
     float m_emitterInterval = 1.0f; // seconds
-
-    // Stats panel feedback animation
-    u32 m_emitterFlashColor = 0;
-    size_t m_lastEmitterCount = 0;
 
     // Tracks last selection per editor to animate selection changes
     std::unordered_map<u64, size_t> m_lastPickerSelection;

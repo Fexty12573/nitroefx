@@ -73,13 +73,13 @@ void Editor::update(float deltaTime) {
 void Editor::render() {
     const auto& instances = g_projectManager->getOpenEditors();
 
-    if (m_discardTempTexture) {
-        destroyTempTexture();
-    }
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
+    if (editor) {
+        if (m_discardTempTexture) {
+            destroyTempTexture();
+        }
 
-    if (m_deleteSelectedTexture) {
-        const auto& editor = g_projectManager->getActiveEditor();
-        if (editor) {
+        if (m_deleteSelectedTexture) {
             editor->getArchive().deleteTexture(m_selectedTexture);
             m_selectedTexture = -1;
             m_deleteSelectedTexture = false;
@@ -94,7 +94,7 @@ void Editor::render() {
     ImGui::SetNextWindowClass(&windowClass);
     ImGui::Begin("Work Area##Editor", nullptr, ImGuiWindowFlags_NoDecoration);
 
-    std::vector<std::shared_ptr<EditorInstance>> toClose;
+    std::vector<std::shared_ptr<BaseEditor>> toClose;
     if (ImGui::BeginTabBar("Editor Instances", ImGuiTabBarFlags_Reorderable 
         | ImGuiTabBarFlags_FittingPolicyShrink | ImGuiTabBarFlags_AutoSelectNewTabs)) {
         for (const auto& instance : instances) {
@@ -191,7 +191,7 @@ void Editor::render() {
 }
 
 void Editor::renderParticles() {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -210,7 +210,12 @@ void Editor::renderMenu(std::string_view name) {
         if (ImGui::MenuItemIcon(ICON_FA_EYE, "Use Ortho Camera", nullptr, &m_settings.useOrthographicCamera)) {
             saveConfig = true;
             for (const auto& instance : g_projectManager->getOpenEditors()) {
-                instance->getCamera().setProjection(
+                const auto particleEditor = std::dynamic_pointer_cast<EditorInstance>(instance);
+                if (!particleEditor) {
+                    continue;
+                }
+
+                particleEditor->getCamera().setProjection(
                     m_settings.useOrthographicCamera ? CameraProjection::Orthographic : CameraProjection::Perspective
                 );
             }
@@ -263,59 +268,6 @@ void Editor::renderToolbar(float itemHeight) {
     ImGui::PopStyleVar();
 }
 
-void Editor::renderStats() {
-    const auto& editor = g_projectManager->getActiveEditor();
-    if (!editor) {
-        return;
-    }
-
-    const auto& system = editor->getParticleSystem();
-
-    const auto activeParticles = system.getParticleCount();
-    const auto maxParticles = system.getMaxParticles();
-    const auto fraction = static_cast<float>(activeParticles) / maxParticles;
-    const auto particleText = fmt::format("Particles: {}/{}", activeParticles, maxParticles);
-
-    constexpr u32 colorLow = IM_COL32(0, 200, 0, 255);
-    constexpr u32 colorHigh = IM_COL32(220, 0, 0, 255);
-    ImGui::AnimatedStatBar("##particleBar", fraction, particleText.c_str(), colorLow, colorHigh);
-
-    const auto emitterCount = system.getEmitters().size();
-    const float dt = ImGui::GetIO().DeltaTime;
-    const ImGuiID flashId = ImGui::GetID("##emitterFlash");
-
-    if (emitterCount != m_lastEmitterCount) {
-        m_emitterFlashColor = emitterCount > m_lastEmitterCount ? AppColors::LightGreen : AppColors::LightRed;
-        iam_tween_float(flashId, 0, 1.0f, 0.0f, iam_ease_preset(iam_ease_linear), iam_policy_cut, dt, 0.0f);
-        m_lastEmitterCount = emitterCount;
-    }
-
-    const float flash = iam_tween_float(
-        flashId, 0, 0.0f, 0.45f,
-        iam_ease_preset(iam_ease_out_cubic),
-        iam_policy_crossfade, dt, 0.0f
-    );
-
-    const auto emitterText = fmt::format("Active Emitters: {}", emitterCount);
-    if (flash > 0.001f && m_emitterFlashColor != 0) {
-        const auto& style = ImGui::GetStyle();
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        const ImVec2 ts = ImGui::CalcTextSize(emitterText.c_str());
-        const ImVec2 pad = { style.FramePadding.x, style.FramePadding.y * 0.5f };
-
-        ImVec4 hl = ImGui::ColorConvertU32ToFloat4(m_emitterFlashColor);
-        hl.w = flash * 0.35f;
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            p - pad,
-            { p.x + ts.x + pad.x, p.y + ts.y + pad.y },
-            ImGui::ColorConvertFloat4ToU32(hl),
-            style.FrameRounding
-        );
-    }
-
-    ImGui::TextUnformatted(emitterText.c_str());
-}
-
 void Editor::openPicker() {
     m_pickerOpen = true;
 }
@@ -329,7 +281,7 @@ void Editor::openTextureManager() {
 }
 
 void Editor::updateParticles(float deltaTime) {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -345,7 +297,7 @@ void Editor::updateParticles(float deltaTime) {
         }
     }
     
-    editor->updateParticles(deltaTime * m_timeScale);
+    editor->update(deltaTime * m_timeScale);
 }
 
 void Editor::openSettings() {
@@ -377,8 +329,8 @@ void Editor::onEditorOpened(const std::shared_ptr<EditorInstance> &editor) {
 
 void Editor::onEditorRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath) {
     const auto editor = g_projectManager->getEditor(oldPath);
-    if (editor) {
-        editor->rename(newPath);
+    if (const auto particleEditor = std::dynamic_pointer_cast<EditorInstance>(editor)) {
+        particleEditor->rename(newPath);
     }
 }
 
@@ -462,7 +414,7 @@ void Editor::saveConfig(nlohmann::json& config) const {
 }
 
 bool Editor::canUndo() const {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return false;
     }
@@ -471,7 +423,7 @@ bool Editor::canUndo() const {
 }
 
 bool Editor::canRedo() const {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return false;
     }
@@ -480,7 +432,7 @@ bool Editor::canRedo() const {
 }
 
 void Editor::undo() {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -491,7 +443,7 @@ void Editor::undo() {
 }
 
 void Editor::redo() {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -538,7 +490,7 @@ void Editor::pushClipboard(const std::string& source, const SPLResource& res, co
 }
 
 void Editor::playEmitter(EmitterSpawnType spawnType) {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -565,7 +517,7 @@ void Editor::playEmitter(EmitterSpawnType spawnType) {
 }
 
 void Editor::playAllEmitters(EmitterSpawnType spawnType) {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -588,7 +540,7 @@ void Editor::playAllEmitters(EmitterSpawnType spawnType) {
 }
 
 void Editor::killEmitters() {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -600,7 +552,7 @@ void Editor::killEmitters() {
 }
 
 void Editor::resetCamera() {
-    const auto& editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) {
         return;
     }
@@ -629,7 +581,7 @@ void Editor::renderResourcePicker() {
         constexpr ImVec2 thumbnailSizeVec = { thumbnailSize, thumbnailSize };
         const float itemHeight = thumbnailSize + style.FramePadding.y * 2;
 
-        const auto& editor = g_projectManager->getActiveEditor();
+        const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
         if (!editor) {
             ImGui::Text("No editor open");
             ImGui::End();
@@ -951,7 +903,7 @@ void Editor::renderResourcePicker() {
 
 void Editor::renderTextureManager() {
     if (ImGui::Begin("Texture Manager##Editor", &m_textureManagerOpen)) {
-        const auto& editor = g_projectManager->getActiveEditor();
+        const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
         if (!editor) {
             ImGui::Text("No editor open");
             ImGui::End();
@@ -1276,7 +1228,7 @@ void Editor::renderResourceEditor() {
     if (ImGui::Begin("Resource Editor##Editor", &m_editorOpen)) {
         ImGui::SliderFloat("Global Time Scale", &m_timeScale, 0.0f, 2.0f, "%.2f");
 
-        const auto& editor = g_projectManager->getActiveEditor();
+        const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
         if (!editor) {
             ImGui::Text("No editor open");
             ImGui::End();
@@ -1622,13 +1574,18 @@ void Editor::updateRenderSettings(bool swapRenderer) {
     const auto editors = g_projectManager->getOpenEditors();
 
     for (const auto& editor : editors) {
-        editor->updateViewportSize();
+        const auto particleEditor = std::dynamic_pointer_cast<EditorInstance>(editor);
+        if (!particleEditor) {
+            continue;
+        }
+
+        particleEditor->updateViewportSize();
 
         if (swapRenderer) {
             if (legacyRenderer) {
-                editor->useLegacyRenderer();
+                particleEditor->useLegacyRenderer();
             } else {
-                editor->useModernRenderer();
+                particleEditor->useModernRenderer();
             }
         }
     }
@@ -2815,7 +2772,9 @@ void Editor::renderDebugShapes(const std::shared_ptr<EditorInstance>& editor, st
 void Editor::updateMaxParticles() {
     const auto editors = g_projectManager->getOpenEditors();
     for (const auto& editor : editors) {
-        editor->setMaxParticles(m_settings.maxParticles);
+        if (const auto particleEditor = std::dynamic_pointer_cast<EditorInstance>(editor)) {
+            particleEditor->setMaxParticles(m_settings.maxParticles);
+        }
     }
 }
 
@@ -2824,7 +2783,8 @@ void Editor::openTempTexture(const std::filesystem::path& path, size_t destIndex
         return (value & (value - 1)) == 0;
     };
 
-    if (destIndex != -1 && destIndex >= g_projectManager->getActiveEditor()->getArchive().getTextures().size()) {
+    const auto activeEditor = g_projectManager->getActiveEditorAs<EditorInstance>();
+    if (destIndex != -1 && activeEditor && destIndex >= activeEditor->getArchive().getTextures().size()) {
         spdlog::error("Invalid destination index for temp texture: {}", destIndex);
         return;
     }
@@ -2960,7 +2920,11 @@ void Editor::importTempTexture() {
         return;
     }
 
-    auto& activeEditor = g_projectManager->getActiveEditor();
+    const auto activeEditor = g_projectManager->getActiveEditorAs<EditorInstance>();
+    if (!activeEditor) {
+        return;
+    }
+
     auto& archive = activeEditor->getArchive();
     auto& textures = archive.getTextures();
     auto& texture = m_tempTexture->destIndex != -1 ? textures[m_tempTexture->destIndex] : textures.emplace_back();

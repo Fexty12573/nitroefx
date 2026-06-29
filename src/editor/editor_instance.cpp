@@ -1,11 +1,15 @@
 #include "editor_instance.h"
 #include "application.h"
+#include "application_colors.h"
 #include "project_manager.h"
 #include "spl/spl_random.h"
 #include "gfx/gl_util.h"
+#include "imgui/extensions.h"
 
 #include <GL/glew.h>
 #include <imgui.h>
+#include <im_anim.h>
+#include <fmt/format.h>
 #include <random>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -66,8 +70,8 @@ EditorInstance::EditorInstance(bool isTemp)
     m_uniqueID = SPLRandom::nextU64();
     m_updateProj = true;
 
-    g_application->getEditor()->selectResource(m_uniqueID, -1);
-    notifyResourceChanged(-1);
+    g_application->getEditor()->selectResource(m_uniqueID, INVALID_RESOURCE);
+    notifyResourceChanged(INVALID_RESOURCE);
 
     // Choose particle renderer backend
     if (g_application->getEditor()->getSettings().useLegacyParticleRenderer) {
@@ -182,9 +186,57 @@ void EditorInstance::renderParticles(const std::vector<Renderer*>& renderers) {
     m_viewport.unbind();
 }
 
-void EditorInstance::updateParticles(float deltaTime) {
+void EditorInstance::update(float deltaTime) {
     m_camera.update();
     m_particleSystem.update(deltaTime);
+}
+
+void EditorInstance::renderStats() {
+    const auto& system = m_particleSystem;
+
+    const auto activeParticles = system.getParticleCount();
+    const auto maxParticles = system.getMaxParticles();
+    const auto fraction = static_cast<float>(activeParticles) / maxParticles;
+    const auto particleText = fmt::format("Particles: {}/{}", activeParticles, maxParticles);
+
+    constexpr u32 colorLow = IM_COL32(0, 200, 0, 255);
+    constexpr u32 colorHigh = IM_COL32(220, 0, 0, 255);
+    ImGui::AnimatedStatBar("##particleBar", fraction, particleText.c_str(), colorLow, colorHigh);
+
+    const auto emitterCount = system.getEmitters().size();
+    const float dt = ImGui::GetIO().DeltaTime;
+    const ImGuiID flashId = ImGui::GetID("##emitterFlash");
+
+    if (emitterCount != m_lastEmitterCount) {
+        m_emitterFlashColor = emitterCount > m_lastEmitterCount ? AppColors::LightGreen : AppColors::LightRed;
+        iam_tween_float(flashId, 0, 1.0f, 0.0f, iam_ease_preset(iam_ease_linear), iam_policy_cut, dt, 0.0f);
+        m_lastEmitterCount = emitterCount;
+    }
+
+    const float flash = iam_tween_float(
+        flashId, 0, 0.0f, 0.45f,
+        iam_ease_preset(iam_ease_out_cubic),
+        iam_policy_crossfade, dt, 0.0f
+    );
+
+    const auto emitterText = fmt::format("Active Emitters: {}", emitterCount);
+    if (flash > 0.001f && m_emitterFlashColor != 0) {
+        const auto& style = ImGui::GetStyle();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const ImVec2 ts = ImGui::CalcTextSize(emitterText.c_str());
+        const ImVec2 pad = { style.FramePadding.x, style.FramePadding.y * 0.5f };
+
+        ImVec4 hl = ImGui::ColorConvertU32ToFloat4(m_emitterFlashColor);
+        hl.w = flash * 0.35f;
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            p - pad,
+            { p.x + ts.x + pad.x, p.y + ts.y + pad.y },
+            ImGui::ColorConvertFloat4ToU32(hl),
+            style.FrameRounding
+        );
+    }
+
+    ImGui::TextUnformatted(emitterText.c_str());
 }
 
 void EditorInstance::handleEvent(const SDL_Event& event) {
@@ -212,8 +264,8 @@ bool EditorInstance::notifyClosing() {
 }
 
 void EditorInstance::notifyResourceChanged(size_t index) {
-    if (index == -1) {
-        m_selectedResource = -1;
+    if (index == INVALID_RESOURCE) {
+        m_selectedResource = INVALID_RESOURCE;
         return;
     }
 
