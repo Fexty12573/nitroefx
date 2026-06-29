@@ -7,7 +7,6 @@
 #include "version.h"
 #include "util/circular_buffer.h"
 
-#include <argparse/argparse.hpp>
 #include <SDL3/SDL_events.h>
 #include <string_view>
 
@@ -78,8 +77,7 @@ class Application {
 public:
     Application();
 
-    int run(int argc, char** argv);
-    int runCli(argparse::ArgumentParser& parser);
+    int run(std::optional<std::filesystem::path> openPath = std::nullopt);
 
     void showPopup(const std::string& title, const std::string& message, PopupType type, std::optional<PopupCallback> callback);
 
@@ -142,7 +140,7 @@ private:
     void loadIcon();
     void clearTempDir();
     void executeAction(u32 action);
-    void checkArgs(int argc, char** argv);
+    void openStartupTarget(const std::filesystem::path& path);
     void clearCache();
     void checkForBackups();
 
@@ -249,6 +247,9 @@ private:
 
     // Tracks whether we've already attempted to initialize the layout
     bool m_layoutInitialized = false;
+
+    // Optional file/folder to open once the GUI has initialized (from the command line)
+    std::optional<std::filesystem::path> m_startupPath;
 
     std::string m_downloadedArchivePath;
     std::string m_extractedBinaryPath;

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "editor_instance.h"
+#include "base_editor.h"
+#include "types.h"
 
 #include <SDL3/SDL_events.h>
 #include <nitroarc.h>
@@ -21,6 +22,9 @@
 #include <variant>
 #include <regex>
 
+#include "editor_instance.h"
+
+
 class Editor;
 
 // Project is a bit of an overstatement here, because it's really just a directory
@@ -33,7 +37,7 @@ public:
     void openEditor(); // Create an editor without an associated file
     void openTempEditor(const std::filesystem::path& path);
     void openNarcProject(const std::filesystem::path& path);
-    void closeEditor(const std::shared_ptr<EditorInstance>& editor, bool force = false);
+    void closeEditor(const std::shared_ptr<BaseEditor>& editor, bool force = false);
     void closeTempEditor();
     void closeAllEditors();
     void saveAllEditors() const;
@@ -45,7 +49,7 @@ public:
         });
     }
 
-    std::shared_ptr<EditorInstance> getEditor(const std::filesystem::path& path) const {
+    std::shared_ptr<BaseEditor> getEditor(const std::filesystem::path& path) const {
         const auto it = std::ranges::find_if(m_openEditors, [&path](const auto& editor) {
             return editor->getPath() == path;
         });
@@ -53,7 +57,7 @@ public:
         return it != m_openEditors.end() ? *it : nullptr;
     }
 
-    std::shared_ptr<EditorInstance> getEditor(u64 uniqueID) const {
+    std::shared_ptr<BaseEditor> getEditor(u64 uniqueID) const {
         const auto it = std::ranges::find_if(m_openEditors, [uniqueID](const auto& editor) {
             return editor->getUniqueID() == uniqueID;
         });
@@ -61,7 +65,7 @@ public:
         return it != m_openEditors.end() ? *it : nullptr;
     }
 
-    std::shared_ptr<EditorInstance> getNarcEditor(size_t index) {
+    std::shared_ptr<BaseEditor> getNarcEditor(size_t index) {
         const auto it = std::ranges::find_if(m_openEditors, [index](const auto& editor) {
             return editor->getNarcIndex() == index;
         });
@@ -72,15 +76,20 @@ public:
     void open();
     void render();
 
-    std::span<const std::shared_ptr<EditorInstance>> getOpenEditors() const {
+    std::span<const std::shared_ptr<BaseEditor>> getOpenEditors() const {
         return m_openEditors;
     }
 
-    const std::shared_ptr<EditorInstance>& getActiveEditor() const {
+    const std::shared_ptr<BaseEditor>& getActiveEditor() const {
         return m_activeEditor;
     }
 
-    void setActiveEditor(const std::shared_ptr<EditorInstance>& editor) {
+    template<typename T> requires std::is_base_of_v<BaseEditor, T>
+    std::shared_ptr<T> getActiveEditorAs() const {
+        return std::dynamic_pointer_cast<T>(m_activeEditor);
+    }
+
+    void setActiveEditor(const std::shared_ptr<BaseEditor>& editor) {
         m_activeEditor = editor;
     }
 
@@ -120,7 +129,7 @@ public:
         });
     }
 
-    std::span<const std::shared_ptr<EditorInstance>> getUnsavedEditors() {
+    std::span<const std::shared_ptr<BaseEditor>> getUnsavedEditors() {
         return m_unsavedEditors;
     }
 
@@ -173,6 +182,7 @@ private:
     };
 
     void buildDirectoryCache(const std::filesystem::path& directory);
+
     void ensureDirectoryCached(const std::filesystem::path& directory) {
         if (!m_directoryCache.contains(directory)) {
             buildDirectoryCache(directory);
@@ -202,7 +212,7 @@ private:
         explicit FileWatchListener(ProjectManager* projManager) : m_projManager(projManager) {}
 
         void handleFileAction(efsw::WatchID watchId, const std::string& dir,
-            const std::string& filename, efsw::Action action, std::string oldFilename) override {
+                              const std::string& filename, efsw::Action action, std::string oldFilename) override {
             if (!m_projManager) {
                 return;
             }
@@ -284,12 +294,12 @@ private:
     std::unique_ptr<FileWatchListener> m_listener;
     std::unordered_map<std::filesystem::path, std::vector<CachedEntry>, PathHash> m_directoryCache;
 
-    std::vector<std::shared_ptr<EditorInstance>> m_openEditors;
-    std::shared_ptr<EditorInstance> m_activeEditor;
+    std::vector<std::shared_ptr<BaseEditor>> m_openEditors;
+    std::shared_ptr<BaseEditor> m_activeEditor;
     bool m_forceActivate = false;
 
     // Unsaved changes data
-    std::vector<std::shared_ptr<EditorInstance>> m_unsavedEditors;
+    std::vector<std::shared_ptr<BaseEditor>> m_unsavedEditors;
 
     bool m_open = true;
     bool m_hideOtherFiles = false;
@@ -312,7 +322,7 @@ private:
     std::atomic<bool> m_fuzzyIndexBuilding = false;
     bool m_fuzzyOpen = false;
     bool m_fuzzyQueryDirty = false;
-    char m_fuzzyQuery[256] = { 0 };
+    char m_fuzzyQuery[256] = {0};
     std::vector<FuzzyResult> m_fuzzyResults;
     std::string m_prevFuzzyQuery;
     std::vector<size_t> m_prevCandidates;
@@ -332,6 +342,7 @@ private:
         uint64_t timestamp;
         uint64_t fileCount;
     };
+
     struct IndexEntry {
         uint16_t relLen;
         uint16_t filenameLen;

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 include(FetchContent)
 
-if (WIN32)
+if(WIN32)
     set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
 endif()
 
@@ -27,7 +27,7 @@ add_subdirectory(external/embed)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
 
-set(EXTERNAL_SOURCES 
+set(EXTERNAL_SOURCES
     external/tinyfiledialogs/tinyfiledialogs.c
     external/microtar/src/microtar.c
     external/nitroarc/nitroarc.c
@@ -50,6 +50,9 @@ set(EXTERNAL_SOURCES
     # ImPlot
     external/implot/implot.cpp
     external/implot/implot_items.cpp
+
+    # ImNodes
+    external/imnodes/imnodes.cpp
 )
 
 add_executable(nitroefx ${SOURCES} ${EXTERNAL_SOURCES})
@@ -66,7 +69,7 @@ execute_process(
     ERROR_QUIET
 )
 
-if (NOT NITROEFX_VERSION)
+if(NOT NITROEFX_VERSION)
     set(NITROEFX_VERSION "v0.0.0")
 endif()
 
@@ -78,9 +81,11 @@ configure_file(
 
 # Read versions for packages whose CMake configs don't set <pkg>_VERSION
 set(VCPKG_STATUS_FILE "${CMAKE_BINARY_DIR}/vcpkg_installed/vcpkg/status")
-if (EXISTS ${VCPKG_STATUS_FILE})
+
+if(EXISTS ${VCPKG_STATUS_FILE})
     file(READ ${VCPKG_STATUS_FILE} _vcpkg_status)
-    if (_vcpkg_status MATCHES "Package: efsw\nVersion: ([^\n]+)")
+
+    if(_vcpkg_status MATCHES "Package: efsw\nVersion: ([^\n]+)")
         set(efsw_VERSION "${CMAKE_MATCH_1}")
     endif()
 endif()
@@ -91,11 +96,11 @@ configure_file(
     @ONLY
 )
 
-if (WIN32 AND NOT CMAKE_BUILD_TYPE MATCHES Debug)
+if(WIN32 AND NOT CMAKE_BUILD_TYPE MATCHES Debug)
     set_target_properties(nitroefx PROPERTIES WIN32_EXECUTABLE true)
 endif()
 
-if (WIN32)
+if(WIN32)
     set(IMAGEQUANT_LIB "${LIBIMAGEQUANT_DIR}/target/release/imagequant_sys.lib")
 else()
     set(IMAGEQUANT_LIB "${LIBIMAGEQUANT_DIR}/target/release/libimagequant_sys.a")
@@ -115,8 +120,8 @@ add_custom_target(libimagequant_sys_build ALL
 
 add_dependencies(nitroefx libimagequant_sys_build)
 
-target_include_directories(nitroefx PRIVATE 
-    src 
+target_include_directories(nitroefx PRIVATE
+    src
     external/tinyfiledialogs
     external/microtar/src
     external/stb
@@ -127,13 +132,14 @@ target_include_directories(nitroefx PRIVATE
     external/imgui/backends
     external/imgui/misc/freetype
     external/imgui/misc/cpp
-    external/implot)
-target_compile_definitions(nitroefx PRIVATE 
+    external/implot
+    external/imnodes)
+target_compile_definitions(nitroefx PRIVATE
     GLM_ENABLE_EXPERIMENTAL
     IMGUI_DEFINE_MATH_OPERATORS
     IMGUI_USER_CONFIG=<imgui/config.h>)
-target_link_libraries(nitroefx PRIVATE 
-    SDL3::SDL3 
+target_link_libraries(nitroefx PRIVATE
+    SDL3::SDL3
     spdlog::spdlog
     fmt::fmt
     glm::glm
@@ -147,14 +153,15 @@ target_link_libraries(nitroefx PRIVATE
     Freetype::Freetype
     ${IMAGEQUANT_LIB})
 
-if (WIN32)
+if(WIN32)
     target_link_libraries(nitroefx PRIVATE Ws2_32.lib ntdll.lib userenv.lib Mpr.lib)
     target_compile_options(nitroefx PRIVATE /wd4312)
     target_sources(nitroefx PRIVATE data/icon.rc)
     target_compile_definitions(nitroefx PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 else()
     target_compile_options(nitroefx PRIVATE -Wno-int-to-pointer-cast -Wno-deprecated-enum-enum-conversion)
-    if (CMAKE_BUILD_TYPE MATCHES Debug)
+
+    if(CMAKE_BUILD_TYPE MATCHES Debug)
         target_compile_definitions(nitroefx PRIVATE _DEBUG) # Match MSVC debug define
     endif()
 endif()

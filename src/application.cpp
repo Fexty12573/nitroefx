@@ -105,7 +105,9 @@ Application::Application() {
     };
 }
 
-int Application::run(int argc, char** argv) {
+int Application::run(std::optional<std::filesystem::path> openPath) {
+    m_startupPath = std::move(openPath);
+
     initLogging();
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -235,13 +237,15 @@ int Application::run(int argc, char** argv) {
 
         m_editor->update(delta);
 
-        if (!idle || activeEmitters) {
-            m_editor->updateParticles(delta);
-        } else if (idle && !activeEmitters) {
-            m_idleAccumulator += delta;
-            if (m_idleAccumulator > 0.5f) {
-                m_editor->updateParticles(m_idleAccumulator);
-                m_idleAccumulator = 0.0f;
+        if (const auto& active = g_projectManager->getActiveEditor()) {
+            if (!idle || activeEmitters) {
+                active->update(delta);
+            } else if (idle && !activeEmitters) {
+                m_idleAccumulator += delta;
+                if (m_idleAccumulator > 0.5f) {
+                    active->update(m_idleAccumulator);
+                    m_idleAccumulator = 0.0f;
+                }
             }
         }
 
@@ -258,7 +262,9 @@ int Application::run(int argc, char** argv) {
             // Build default docking layout once if no ini file exists
             if (!m_layoutInitialized) {
                 initDefaultDockingLayout();
-                checkArgs(argc, argv);
+                if (m_startupPath) {
+                    openStartupTarget(*m_startupPath);
+                }
             }
 
             ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"));
@@ -343,71 +349,6 @@ int Application::run(int argc, char** argv) {
     ImGui_ImplSDL3_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
-
-    return 0;
-}
-
-int Application::runCli(argparse::ArgumentParser& parser) {
-    if (parser.is_subcommand_used("export")) {
-        const auto& cmd = parser.at<argparse::ArgumentParser>("export");
-        const auto output = cmd.get<std::string>("--output");
-        const auto indices = cmd.get<std::vector<int>>("--index");
-
-        std::filesystem::path filePath(cmd.get<std::string>("path"));
-        if (!SPLArchive::isValid(filePath)) {
-            spdlog::error("Invalid SPL file: {}", filePath.string());
-            return 1;
-        }
-
-        SPLArchive archive(filePath, /* createGpuTextures */ false);
-
-        std::filesystem::path outputPath = output.empty() ? std::filesystem::current_path() : std::filesystem::path(output);
-
-        if (indices.empty()) {
-            std::filesystem::create_directories(outputPath);
-            archive.exportTextures(outputPath);
-            spdlog::info("Exported {} textures to {}", archive.getTextureCount(), outputPath.string());
-            return 0;
-        }
-
-        if (indices.size() == 1) {
-            const int index = indices[0];
-            if (index < 0 || static_cast<size_t>(index) >= archive.getTextureCount()) {
-                spdlog::error("Invalid texture index: {}", index);
-                return 1;
-            }
-
-            if (std::filesystem::is_directory(outputPath)) {
-                std::string filename = fmt::format("texture_{}.png", index);
-                outputPath /= filename;
-            }
-
-            archive.exportTexture(index, outputPath);
-            spdlog::info("Exported texture {} to {}", index, outputPath.string());
-            return 0;
-        }
-
-        if (std::filesystem::is_regular_file(outputPath)) {
-            spdlog::error("Output path must be a directory when exporting multiple textures");
-            return 1;
-        }
-
-        std::filesystem::create_directories(outputPath);
-        archive.exportTextures(outputPath);
-    } else if (parser.is_subcommand_used("info")) {
-        const auto& cmd = parser.at<argparse::ArgumentParser>("info");
-        std::filesystem::path filePath(cmd.get<std::string>("path"));
-        if (!SPLArchive::isValid(filePath)) {
-            spdlog::error("Invalid SPL file: {}", filePath.string());
-            return 1;
-        }
-
-        SPLArchive archive(filePath, /* createGpuTextures */ false);
-        archive.printInfo(filePath.filename().string());
-    } else {
-        spdlog::error("No subcommand specified");
-        return 1;
-    }
 
     return 0;
 }
@@ -1161,7 +1102,9 @@ void Application::renderPerformanceWindow() {
         }
 
         ImGui::SeparatorText("Current Editor");
-        m_editor->renderStats();
+        if (const auto& editor = g_projectManager->getActiveEditor()) {
+            editor->renderStats();
+        }
     }
 
     ImGui::End();
@@ -1835,12 +1778,12 @@ void Application::executeAction(u32 action) {
         break;
     case ApplicationAction::Undo:
         if (g_projectManager->hasActiveEditor()) {
-            g_projectManager->getActiveEditor()->undo();
+            m_editor->undo();
         }
         break;
     case ApplicationAction::Redo:
         if (g_projectManager->hasActiveEditor()) {
-            g_projectManager->getActiveEditor()->redo();
+            m_editor->redo();
         }
         break;
     case ApplicationAction::Exit:
@@ -1870,18 +1813,13 @@ void Application::executeAction(u32 action) {
     }
 }
 
-void Application::checkArgs(int argc, char** argv) {
-    if (argc > 1) {
-        const std::filesystem::path arg = argv[1];
-        if (std::filesystem::is_directory(arg)) {
-            g_projectManager->openProject(arg);
-        }
-        else if (arg.extension() == ".spa") {
-            g_projectManager->openEditor(arg);
-        }
-        else {
-            spdlog::warn("Invalid argument: {}", arg.string());
-        }
+void Application::openStartupTarget(const std::filesystem::path& path) {
+    if (std::filesystem::is_directory(path)) {
+        addRecentProject(path.string());
+        g_projectManager->openProject(path);
+    } else {
+        // Routes by file type (.spa -> editor, .narc/.arc -> narc project) and updates recents.
+        tryOpenEditor(path);
     }
 }
 
@@ -2967,8 +2905,7 @@ bool Application::gunzipFile(const std::filesystem::path& srcPath, std::vector<u
 
 bool Application::hasActiveEmitters() const {
     if (!g_projectManager) return false;
-    if (!g_projectManager->hasActiveEditor()) return false;
-    const auto editor = g_projectManager->getActiveEditor();
+    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
     if (!editor) return false;
     // If any emitters exist we treat as active animation
     return !editor->getParticleSystem().getEmitters().empty();

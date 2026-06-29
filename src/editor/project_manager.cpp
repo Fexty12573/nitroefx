@@ -293,7 +293,7 @@ void ProjectManager::openNarcProject(const fs::path& path) {
     m_isNarc = true;
 }
 
-void ProjectManager::closeEditor(const std::shared_ptr<EditorInstance>& editor, bool force) {
+void ProjectManager::closeEditor(const std::shared_ptr<BaseEditor>& editor, bool force) {
     if (!force && editor->isModified()) {
         m_unsavedEditors.push_back(editor);
         return;
@@ -333,7 +333,7 @@ void ProjectManager::saveAllEditors() const {
 
 void ProjectManager::saveAllNarcEditors() const {
     for (const auto& editor : m_openEditors) {
-        if (editor->isNarc()) {
+        if (editor->getNarcIndex().has_value()) {
             editor->save();
         }
     }
@@ -750,7 +750,9 @@ void ProjectManager::renderNarcFile(NarcEntry& entry, size_t index) {
             ImGui::PushStyleColor(ImGuiCol_Text, AppColors::PastelYellow);
         }
 
-        const bool selected = m_activeEditor ? m_activeEditor->getNarcIndex() == index : false;
+        const bool selected = m_activeEditor
+            ? m_activeEditor->getNarcIndex() == index
+            : false;
         if (ImGui::Selectable(entry.name.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick) && isSplFile) {
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 openEditor(index);
