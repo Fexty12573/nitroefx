@@ -7,11 +7,20 @@
 
 #include "camera.h"
 #include "gfx/gl_viewport.h"
+#include "gfx/gl_texture.h"
 #include "particle_system.h"
 #include "renderer.h"
 #include "editor_history.h"
 #include "spl/spl_archive.h"
+#include "spl/spl_resource.h"
 #include "base_editor.h"
+
+
+enum class EmitterSpawnType {
+    SingleShot,
+    Looped,
+    Interval
+};
 
 
 class EditorInstance : public BaseEditor {
@@ -29,6 +38,12 @@ public:
     void handleEvent(const SDL_Event& event) override;
 
     void renderStats() override;
+    void renderTextureManager(bool* open);
+
+    void playEmitter(EmitterSpawnType spawnType, float interval);
+    void playAllEmitters(EmitterSpawnType spawnType, float interval);
+    void killEmitters();
+    void resetCamera();
 
     void useModernRenderer();
     void useLegacyRenderer();
@@ -135,6 +150,37 @@ public:
     }
 
 private:
+    void openTempTexture(const std::filesystem::path& path, size_t destIndex = -1);
+    void discardTempTexture();
+    void destroyTempTexture();
+    void importTempTexture();
+
+    static bool palettizeTexture(
+        const u8* data,
+        s32 width,
+        s32 height,
+        const TextureImportSpecification& spec,
+        std::vector<u8>& outData,
+        std::vector<u8>& outPalette
+    );
+    static void quantizeTexture(const u8* data, s32 width, s32 height, const TextureImportSpecification& spec, u8* out);
+
+    struct TempTexture {
+        std::string path;
+        u8* data;
+        u8* quantized;
+        s32 width;
+        s32 height;
+        s32 channels;
+        TextureFormat suggestedFormat;
+        bool suggestedFormatUncompressed;
+        TextureImportSpecification spec;
+        TextureConversionPreference preference;
+        std::unique_ptr<GLTexture> texture;
+        bool isValidSize;
+        size_t destIndex = -1;
+    };
+
     static constexpr auto INVALID_RESOURCE = std::numeric_limits<size_t>::max();
 
     std::filesystem::path m_path;
@@ -151,9 +197,24 @@ private:
     size_t m_selectedResource = INVALID_RESOURCE;
     SPLResource m_resourceBefore;
 
+    // Texture manager / import state
+    TempTexture* m_tempTexture = nullptr;
+    float m_tempTextureScale = 1.0f;
+    bool m_discardTempTexture = false;
+    size_t m_selectedTexture = -1;
+    bool m_deleteSelectedTexture = false;
+
     // Stats panel feedback animation
     u32 m_emitterFlashColor = 0;
     size_t m_lastEmitterCount = 0;
+
+    // Interval-spawn tasks owned by this editor
+    struct EmitterSpawnTask {
+        u64 resourceIndex;
+        Clock::time_point time;
+        std::chrono::duration<float> interval;
+    };
+    std::vector<EmitterSpawnTask> m_emitterTasks;
 
     glm::vec2 m_size = {800, 600};
     u64 m_uniqueID;

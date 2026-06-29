@@ -235,13 +235,15 @@ int Application::run(int argc, char** argv) {
 
         m_editor->update(delta);
 
-        if (!idle || activeEmitters) {
-            m_editor->updateParticles(delta);
-        } else if (idle && !activeEmitters) {
-            m_idleAccumulator += delta;
-            if (m_idleAccumulator > 0.5f) {
-                m_editor->updateParticles(m_idleAccumulator);
-                m_idleAccumulator = 0.0f;
+        if (const auto& active = g_projectManager->getActiveEditor()) {
+            if (!idle || activeEmitters) {
+                active->update(delta);
+            } else if (idle && !activeEmitters) {
+                m_idleAccumulator += delta;
+                if (m_idleAccumulator > 0.5f) {
+                    active->update(m_idleAccumulator);
+                    m_idleAccumulator = 0.0f;
+                }
             }
         }
 

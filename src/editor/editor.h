@@ -14,12 +14,6 @@
 #include <unordered_map>
 #include <vector>
 
-enum class EmitterSpawnType {
-    SingleShot,
-    Looped,
-    Interval
-};
-
 class Editor {
 public:
     Editor();
@@ -32,7 +26,6 @@ public:
     void openPicker();
     void openEditor();
     void openTextureManager();
-    void updateParticles(float deltaTime);
     void openSettings();
     void openTutorial();
 
@@ -63,13 +56,20 @@ public:
     void pushClipboard(const std::string& source, const SPLTexture& tex);
     void pushClipboard(const std::string& source, const SPLResource& res, const SPLTexture& tex);
 
+    std::queue<SPLResourceCopy>& clipboardHistory() {
+        return m_clipboardHistory;
+    }
+
     const EditorSettings& getSettings() const {
         return m_settings;
     }
 
+    float getTimeScale() const {
+        return m_timeScale;
+    }
+
 private:
     void renderResourcePicker();
-    void renderTextureManager();
     void renderResourceEditor();
     void renderSettings();
     void renderTutorial();
@@ -99,40 +99,9 @@ private:
 
     void updateMaxParticles();
 
-    void openTempTexture(const std::filesystem::path& path, size_t destIndex = -1);
-    void discardTempTexture();
-    void destroyTempTexture();
-    void importTempTexture();
-
     void ensureValidSelection(const std::shared_ptr<EditorInstance>& editor);
 
-    static bool palettizeTexture(
-        const u8* data, 
-        s32 width, 
-        s32 height, 
-        const TextureImportSpecification& spec, 
-        std::vector<u8>& outData,
-        std::vector<u8>& outPalette
-    );
-    static void quantizeTexture(const u8* data, s32 width, s32 height, const TextureImportSpecification& spec, u8* out);
-
 private:
-    struct TempTexture {
-        std::string path;
-        u8* data;
-        u8* quantized;
-        s32 width;
-        s32 height;
-        s32 channels;
-        TextureFormat suggestedFormat;
-        bool suggestedFormatUncompressed;
-        TextureImportSpecification spec;
-        TextureConversionPreference preference;
-        std::unique_ptr<GLTexture> texture;
-        bool isValidSize;
-        size_t destIndex = -1;
-    };
-
     bool m_pickerOpen = true;
     bool m_textureManagerOpen = true;
     bool m_editorOpen = true;
@@ -161,13 +130,6 @@ private:
     std::array<f32, 64> m_yAnimBuffer1;
     std::array<f32, 64> m_yAnimBuffer2;
 
-    TempTexture* m_tempTexture = nullptr;
-    float m_tempTextureScale = 1.0f;
-    bool m_discardTempTexture = false; // Whether the temp texture should be discarded in the next frame
-
-    size_t m_selectedTexture = -1;
-    bool m_deleteSelectedTexture = false;
-
     std::unordered_map<u64, size_t> m_selectedResources;
     std::weak_ptr<EditorInstance> m_activeEditor;
     std::shared_ptr<GridRenderer> m_gridRenderer;
@@ -175,13 +137,4 @@ private:
     std::shared_ptr<GridRenderer> m_collisionGridRenderer;
 
     std::queue<SPLResourceCopy> m_clipboardHistory;
-
-    struct EmitterSpawnTask {
-        u64 resourceIndex;
-        std::chrono::time_point<std::chrono::steady_clock> time;
-        std::chrono::duration<float> interval;
-        u64 editorID;
-    };
-
-    std::vector<EmitterSpawnTask> m_emitterTasks;
 };

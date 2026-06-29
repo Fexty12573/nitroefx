@@ -73,19 +73,6 @@ void Editor::update(float deltaTime) {
 void Editor::render() {
     const auto& instances = g_projectManager->getOpenEditors();
 
-    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (editor) {
-        if (m_discardTempTexture) {
-            destroyTempTexture();
-        }
-
-        if (m_deleteSelectedTexture) {
-            editor->getArchive().deleteTexture(m_selectedTexture);
-            m_selectedTexture = -1;
-            m_deleteSelectedTexture = false;
-        }
-    }
-
     ImGuiWindowClass windowClass;
     windowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar
         | ImGuiDockNodeFlags_NoDockingOverCentralNode
@@ -122,8 +109,10 @@ void Editor::render() {
         renderResourcePicker();
     }
 
-    if (m_textureManagerOpen) {
-        renderTextureManager();
+    if (const auto pe = g_projectManager->getActiveEditorAs<EditorInstance>()) {
+        if (m_textureManagerOpen) {
+            pe->renderTextureManager(&m_textureManagerOpen);
+        }
     }
 
     if (m_editorOpen) {
@@ -280,25 +269,6 @@ void Editor::openTextureManager() {
     m_textureManagerOpen = true;
 }
 
-void Editor::updateParticles(float deltaTime) {
-    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (!editor) {
-        return;
-    }
-
-    for (auto& task : m_emitterTasks) {
-        const auto now = std::chrono::steady_clock::now();
-        if (task.editorID == editor->getUniqueID() && m_timeScale * (now - task.time) >= task.interval) {
-            editor->getParticleSystem().addEmitter(
-                editor->getArchive().getResources()[task.resourceIndex], 
-                false
-            );
-            task.time = now;
-        }
-    }
-    
-    editor->update(deltaTime * m_timeScale);
-}
 
 void Editor::openSettings() {
     if (m_settingsOpen) {
@@ -490,74 +460,27 @@ void Editor::pushClipboard(const std::string& source, const SPLResource& res, co
 }
 
 void Editor::playEmitter(EmitterSpawnType spawnType) {
-    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (!editor) {
-        return;
-    }
-
-    const auto resourceIndex = m_selectedResources[editor->getUniqueID()];
-    if (resourceIndex < 0 || resourceIndex >= editor->getArchive().getResources().size()) {
-        spdlog::warn("Invalid resource index: {}", resourceIndex);
-        return;
-    }
-
-    editor->getParticleSystem().addEmitter(
-        editor->getArchive().getResource(resourceIndex),
-        spawnType == EmitterSpawnType::Looped
-    );
-
-    if (spawnType == EmitterSpawnType::Interval) {
-        m_emitterTasks.emplace_back(
-            resourceIndex,
-            std::chrono::steady_clock::now(),
-            std::chrono::duration<float>(m_emitterInterval),
-            editor->getUniqueID()
-        );
+    if (const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>()) {
+        editor->playEmitter(spawnType, m_emitterInterval);
     }
 }
 
 void Editor::playAllEmitters(EmitterSpawnType spawnType) {
-    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (!editor) {
-        return;
-    }
-
-    for (size_t i = 0; i < editor->getArchive().getResources().size(); ++i) {
-        editor->getParticleSystem().addEmitter(
-            editor->getArchive().getResource(i),
-            spawnType == EmitterSpawnType::Looped
-        );
-
-        if (spawnType == EmitterSpawnType::Interval) {
-            m_emitterTasks.emplace_back(
-                i,
-                std::chrono::steady_clock::now(),
-                std::chrono::duration<float>(m_emitterInterval),
-                editor->getUniqueID()
-            );
-        }
+    if (const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>()) {
+        editor->playAllEmitters(spawnType, m_emitterInterval);
     }
 }
 
 void Editor::killEmitters() {
-    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (!editor) {
-        return;
+    if (const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>()) {
+        editor->killEmitters();
     }
-
-    editor->getParticleSystem().killAllEmitters();
-    std::erase_if(m_emitterTasks, [id = editor->getUniqueID()](const auto& task) {
-        return task.editorID == id;
-    });
 }
 
 void Editor::resetCamera() {
-    const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (!editor) {
-        return;
+    if (const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>()) {
+        editor->resetCamera();
     }
-
-    editor->getCamera().reset();
 }
 
 void Editor::handleEvent(const SDL_Event& event) {
@@ -901,13 +824,18 @@ void Editor::renderResourcePicker() {
     ImGui::End();
 }
 
-void Editor::renderTextureManager() {
-    if (ImGui::Begin("Texture Manager##Editor", &m_textureManagerOpen)) {
-        const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-        if (!editor) {
-            ImGui::Text("No editor open");
-            ImGui::End();
-            return;
+void EditorInstance::renderTextureManager(bool* open) {
+    if (ImGui::Begin("Texture Manager##Editor", open)) {
+        auto* const editor = this;
+
+        // Process deferred actions from a previous frame before touching the archive.
+        if (m_discardTempTexture) {
+            destroyTempTexture();
+        }
+        if (m_deleteSelectedTexture) {
+            m_archive.deleteTexture(m_selectedTexture);
+            m_selectedTexture = -1;
+            m_deleteSelectedTexture = false;
         }
 
         auto& archive = editor->getArchive();
@@ -986,7 +914,7 @@ void Editor::renderTextureManager() {
                 }
 
                 if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy", nullptr, false, AppColors::LightGreen3)) {
-                    pushClipboard(editor->getName(), texture);
+                    g_application->getEditor()->pushClipboard(editor->getName(), texture);
                 }
 
                 if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, AppColors::Gray)) {
@@ -1041,11 +969,12 @@ void Editor::renderTextureManager() {
         ImGui::EndChild();
 
         const auto copyTexture = [&] {
-            const auto& copy = m_clipboardHistory.back();
+            auto& clipboard = g_application->getEditor()->clipboardHistory();
+            const auto& copy = clipboard.back();
             if (!copy.texture || copy.resource) {
                 spdlog::error("No texture in clipboard to paste");
             } else {
-                auto& tex = *m_clipboardHistory.back().texture;
+                auto& tex = *clipboard.back().texture;
 
                 auto& texData = archive.getTextureData();
                 auto& palData = archive.getPaletteData();
@@ -1062,13 +991,13 @@ void Editor::renderTextureManager() {
         };
 
         if (ImGui::IsWindowFocused() || ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
-           if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::GetIO().KeyCtrl && !m_clipboardHistory.empty()) {
+           if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::GetIO().KeyCtrl && !g_application->getEditor()->clipboardHistory().empty()) {
                 copyTexture();
            }
         }
 
         if (!anyHovered && ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !m_clipboardHistory.empty())) {
+            if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !g_application->getEditor()->clipboardHistory().empty())) {
                 copyTexture();
             }
 
@@ -2778,13 +2707,12 @@ void Editor::updateMaxParticles() {
     }
 }
 
-void Editor::openTempTexture(const std::filesystem::path& path, size_t destIndex) {
+void EditorInstance::openTempTexture(const std::filesystem::path& path, size_t destIndex) {
     constexpr auto isPowerOf2 = [](s32 value) {
         return (value & (value - 1)) == 0;
     };
 
-    const auto activeEditor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (destIndex != -1 && activeEditor && destIndex >= activeEditor->getArchive().getTextures().size()) {
+    if (destIndex != -1 && destIndex >= m_archive.getTextures().size()) {
         spdlog::error("Invalid destination index for temp texture: {}", destIndex);
         return;
     }
@@ -2902,12 +2830,12 @@ void Editor::openTempTexture(const std::filesystem::path& path, size_t destIndex
     spng_ctx_free(ctx);
 }
 
-void Editor::discardTempTexture() {
+void EditorInstance::discardTempTexture() {
     m_discardTempTexture = true;
     spdlog::info("Discarding temp texture");
 }
 
-void Editor::destroyTempTexture() {
+void EditorInstance::destroyTempTexture() {
     stbi_image_free(m_tempTexture->data);
     delete[] m_tempTexture->quantized;
     delete m_tempTexture;
@@ -2915,17 +2843,12 @@ void Editor::destroyTempTexture() {
     m_discardTempTexture = false;
 }
 
-void Editor::importTempTexture() {
+void EditorInstance::importTempTexture() {
     if (!m_tempTexture) {
         return;
     }
 
-    const auto activeEditor = g_projectManager->getActiveEditorAs<EditorInstance>();
-    if (!activeEditor) {
-        return;
-    }
-
-    auto& archive = activeEditor->getArchive();
+    auto& archive = m_archive;
     auto& textures = archive.getTextures();
     auto& texture = m_tempTexture->destIndex != -1 ? textures[m_tempTexture->destIndex] : textures.emplace_back();
     texture.glTexture = std::move(m_tempTexture->texture);
@@ -2974,7 +2897,7 @@ void Editor::importTempTexture() {
 
     discardTempTexture();
 
-    activeEditor->getParticleSystem().getRenderer().setTextures(textures);
+    m_particleSystem.getRenderer().setTextures(textures);
 }
 
 void Editor::ensureValidSelection(const std::shared_ptr<EditorInstance>& editor) {
@@ -2987,11 +2910,11 @@ void Editor::ensureValidSelection(const std::shared_ptr<EditorInstance>& editor)
     }
 }
 
-bool Editor::palettizeTexture(const u8* data, s32 width, s32 height, const TextureImportSpecification& spec, std::vector<u8>& outData, std::vector<u8>& outPalette) {
+bool EditorInstance::palettizeTexture(const u8* data, s32 width, s32 height, const TextureImportSpecification& spec, std::vector<u8>& outData, std::vector<u8>& outPalette) {
     return SPLTexture::convertFromRGBA8888(data, width, height, spec.format, outData, outPalette);
 }
 
-void Editor::quantizeTexture(const u8* data, s32 width, s32 height, const TextureImportSpecification& spec, u8* out) {
+void EditorInstance::quantizeTexture(const u8* data, s32 width, s32 height, const TextureImportSpecification& spec, u8* out) {
     liq_attr* attr = liq_attr_create();
     liq_set_max_colors(attr, spec.getMaxColors());
     

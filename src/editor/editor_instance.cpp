@@ -187,8 +187,51 @@ void EditorInstance::renderParticles(const std::vector<Renderer*>& renderers) {
 }
 
 void EditorInstance::update(float deltaTime) {
+    const float timeScale = g_application->getEditor()->getTimeScale();
+
+    const auto now = Clock::now();
+    for (auto& task : m_emitterTasks) {
+        if (timeScale * (now - task.time) >= task.interval) {
+            m_particleSystem.addEmitter(m_archive.getResources()[task.resourceIndex], false);
+            task.time = now;
+        }
+    }
+
     m_camera.update();
-    m_particleSystem.update(deltaTime);
+    m_particleSystem.update(deltaTime * timeScale);
+}
+
+void EditorInstance::playEmitter(EmitterSpawnType spawnType, float interval) {
+    const auto resourceIndex = m_selectedResource;
+    if (resourceIndex >= m_archive.getResources().size()) {
+        spdlog::warn("Invalid resource index: {}", resourceIndex);
+        return;
+    }
+
+    m_particleSystem.addEmitter(m_archive.getResource(resourceIndex), spawnType == EmitterSpawnType::Looped);
+
+    if (spawnType == EmitterSpawnType::Interval) {
+        m_emitterTasks.emplace_back(resourceIndex, Clock::now(), std::chrono::duration<float>(interval));
+    }
+}
+
+void EditorInstance::playAllEmitters(EmitterSpawnType spawnType, float interval) {
+    for (size_t i = 0; i < m_archive.getResources().size(); ++i) {
+        m_particleSystem.addEmitter(m_archive.getResource(i), spawnType == EmitterSpawnType::Looped);
+
+        if (spawnType == EmitterSpawnType::Interval) {
+            m_emitterTasks.emplace_back(i, Clock::now(), std::chrono::duration<float>(interval));
+        }
+    }
+}
+
+void EditorInstance::killEmitters() {
+    m_particleSystem.killAllEmitters();
+    m_emitterTasks.clear();
+}
+
+void EditorInstance::resetCamera() {
+    m_camera.reset();
 }
 
 void EditorInstance::renderStats() {
