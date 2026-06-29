@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <utility> // std::pair
@@ -38,10 +39,13 @@ public:
     void handleEvent(const SDL_Event& event) override;
 
     void renderStats() override;
+    void renderPanels() override;
+    void renderResourcePicker(bool* open);
     void renderTextureManager(bool* open);
+    void renderResourceEditor(bool* open);
 
-    void playEmitter(EmitterSpawnType spawnType, float interval);
-    void playAllEmitters(EmitterSpawnType spawnType, float interval);
+    void playEmitter(EmitterSpawnType spawnType);
+    void playAllEmitters(EmitterSpawnType spawnType);
     void killEmitters();
     void resetCamera();
 
@@ -129,6 +133,12 @@ public:
         return m_archive;
     }
 
+    [[nodiscard]] size_t getSelectedResource() const {
+        return m_selectedResource;
+    }
+
+    void ensureValidSelection();
+
     [[nodiscard]] u64 getUniqueID() const override {
         return m_uniqueID;
     }
@@ -150,6 +160,24 @@ public:
     }
 
 private:
+    void renderHeaderEditor(SPLResourceHeader& header);
+    void renderBehaviorEditor(SPLResource& res);
+    bool renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavior>& gravity);
+    bool renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>& random);
+    bool renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>& magnet);
+    bool renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& spin);
+    bool renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisionPlaneBehavior>& collisionPlane);
+    bool renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenceBehavior>& convergence);
+
+    void renderAnimationEditor(SPLResource& res);
+    bool renderScaleAnimEditor(SPLScaleAnim& res);
+    bool renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res);
+    bool renderAlphaAnimEditor(SPLAlphaAnim& res);
+    bool renderTexAnimEditor(SPLTexAnim& res);
+    void renderChildrenEditor(SPLResource& res);
+
+    void helpPopup(std::string_view text) const;
+
     void openTempTexture(const std::filesystem::path& path, size_t destIndex = -1);
     void discardTempTexture();
     void destroyTempTexture();
@@ -215,6 +243,16 @@ private:
         std::chrono::duration<float> interval;
     };
     std::vector<EmitterSpawnTask> m_emitterTasks;
+    EmitterSpawnType m_emitterSpawnType = EmitterSpawnType::SingleShot;
+    float m_emitterInterval = 1.0f; // seconds
+
+    // Resource picker: last selection (for selection-change animations)
+    size_t m_lastPickerSelection = INVALID_RESOURCE;
+
+    // Scratch buffers for animation plots
+    std::array<f32, 64> m_xAnimBuffer{};
+    std::array<f32, 64> m_yAnimBuffer1{};
+    std::array<f32, 64> m_yAnimBuffer2{};
 
     glm::vec2 m_size = {800, 600};
     u64 m_uniqueID;

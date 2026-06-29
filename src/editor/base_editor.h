@@ -49,4 +49,5 @@ public:
     virtual void update(float dt) {}
 
     virtual void renderStats() {}
+    virtual void renderPanels() {}
 };

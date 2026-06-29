@@ -25,10 +25,11 @@
 #include <SDL3/SDL_misc.h>
 
 
-#define LOCKED_EDITOR() activeEditor_locked
-#define LOCK_EDITOR() auto LOCKED_EDITOR() = m_activeEditor.lock()
-#define NOTIFY(action) LOCKED_EDITOR()->valueChanged(action)
-#define PUSH_HISTORY() LOCKED_EDITOR()->pushHistory()
+// FIXME: Remove all this
+#define LOCKED_EDITOR() this
+#define LOCK_EDITOR() ((void)0)
+#define NOTIFY(action) this->valueChanged(action)
+#define PUSH_HISTORY() this->pushHistory()
 #define HELP(name) helpPopup(help::name)
 
 
@@ -40,10 +41,12 @@ constexpr std::array s_emitterSpawnTypes = {
     "Interval"
 };
 
+const u32 s_hoverAccentColor = ImGui::ColorConvertFloat4ToU32({ 0.7f, 0.3f, 0.7f, 1.0f });
+
 }
 
 
-Editor::Editor() : m_xAnimBuffer(), m_yAnimBuffer1() {
+Editor::Editor() {
     m_gridRenderer = std::make_shared<GridRenderer>(s_gridDimensions, s_gridSpacing);
     m_debugRenderer = std::make_unique<DebugRenderer>(1000);
     m_collisionGridRenderer = std::make_shared<GridRenderer>(s_gridDimensions / 2, s_gridSpacing);
@@ -105,18 +108,8 @@ void Editor::render() {
 
     ImGui::End();
 
-    if (m_pickerOpen) {
-        renderResourcePicker();
-    }
-
-    if (const auto pe = g_projectManager->getActiveEditorAs<EditorInstance>()) {
-        if (m_textureManagerOpen) {
-            pe->renderTextureManager(&m_textureManagerOpen);
-        }
-    }
-
-    if (m_editorOpen) {
-        renderResourceEditor();
+    if (const auto& active = g_projectManager->getActiveEditor()) {
+        active->renderPanels();
     }
 
     if (m_settingsOpen) {
@@ -408,7 +401,7 @@ void Editor::undo() {
     }
 
     if (editor->undo() == EditorActionType::ResourceAdd) {
-        ensureValidSelection(editor);
+        editor->ensureValidSelection();
     }
 }
 
@@ -419,7 +412,7 @@ void Editor::redo() {
     }
 
     if (editor->redo() == EditorActionType::ResourceRemove) {
-        ensureValidSelection(editor);
+        editor->ensureValidSelection();
     }
 }
 
@@ -461,13 +454,13 @@ void Editor::pushClipboard(const std::string& source, const SPLResource& res, co
 
 void Editor::playEmitter(EmitterSpawnType spawnType) {
     if (const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>()) {
-        editor->playEmitter(spawnType, m_emitterInterval);
+        editor->playEmitter(spawnType);
     }
 }
 
 void Editor::playAllEmitters(EmitterSpawnType spawnType) {
     if (const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>()) {
-        editor->playAllEmitters(spawnType, m_emitterInterval);
+        editor->playAllEmitters(spawnType);
     }
 }
 
@@ -492,24 +485,28 @@ void Editor::handleEvent(const SDL_Event& event) {
     editor->handleEvent(event);
 }
 
-void Editor::selectResource(u64 editorID, size_t resourceIndex) {
-    m_selectedResources[editorID] = resourceIndex;
+void EditorInstance::renderPanels() {
+    auto* const shell = g_application->getEditor();
+    if (shell->pickerOpen()) {
+        renderResourcePicker(&shell->pickerOpen());
+    }
+    if (shell->textureManagerOpen()) {
+        renderTextureManager(&shell->textureManagerOpen());
+    }
+    if (shell->resourceEditorOpen()) {
+        renderResourceEditor(&shell->resourceEditorOpen());
+    }
 }
 
-void Editor::renderResourcePicker() {
-    if (ImGui::Begin("Resource Picker##Editor", &m_pickerOpen)) {
+void EditorInstance::renderResourcePicker(bool* open) {
+    if (ImGui::Begin("Resource Picker##Editor", open)) {
 
         const auto& style = ImGui::GetStyle();
         constexpr float thumbnailSize = 48.0f;
         constexpr ImVec2 thumbnailSizeVec = { thumbnailSize, thumbnailSize };
         const float itemHeight = thumbnailSize + style.FramePadding.y * 2;
 
-        const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-        if (!editor) {
-            ImGui::Text("No editor open");
-            ImGui::End();
-            return;
-        }
+        auto* const editor = this;
 
         const SPLResourceCopy* toPaste = nullptr;
         size_t pasteIndex = -1;
@@ -517,12 +514,6 @@ void Editor::renderResourcePicker() {
         auto& archive = editor->getArchive();
         auto& resources = archive.getResources();
         auto& textures = archive.getTextures();
-
-        const auto id = editor->getUniqueID();
-        if (!m_selectedResources.contains(id)) {
-            m_selectedResources[id] = -1;
-            editor->notifyResourceChanged(-1);
-        }
 
         bool anyHovered = false;
 
@@ -534,11 +525,11 @@ void Editor::renderResourcePicker() {
             const float dt = ImGui::GetIO().DeltaTime;
 
             // Detect selection changes
-            const size_t selected = m_selectedResources[id];
+            const size_t selected = m_selectedResource;
             const ImGuiID accentId = ImGui::GetID("##pickerAccent");
             bool selectionChanged = false;
-            if (m_lastPickerSelection[id] != selected) {
-                m_lastPickerSelection[id] = selected;
+            if (m_lastPickerSelection != selected) {
+                m_lastPickerSelection = selected;
                 selectionChanged = true;
                 iam_tween_float(accentId, 0, 0.0f, 0.0f, iam_ease_preset(iam_ease_linear), iam_policy_cut, dt, 0.0f);
             }
@@ -559,13 +550,13 @@ void Editor::renderResourcePicker() {
 
                 const auto name = fmt::format("[{}] Tex {}x{}", i, texture.width, texture.height);
 
-                auto bgColor = m_selectedResources[id] == i
+                auto bgColor = m_selectedResource == i
                     ? style.Colors[ImGuiCol_ButtonActive]
                     : style.Colors[ImGuiCol_Button];
 
                 const auto cursor = ImGui::GetCursorScreenPos();
                 if (ImGui::InvisibleButton("##Resource", { itemWidth, itemHeight })) {
-                    m_selectedResources[id] = i;
+                    m_selectedResource = i;
                     editor->notifyResourceChanged(i);
                 }
 
@@ -617,7 +608,7 @@ void Editor::renderResourcePicker() {
                 );
 
                 // Selection accent bar on the left edge, eased in on selection change
-                if (m_selectedResources[id] == i && accentGrow > 0.001f) {
+                if (m_selectedResource == i && accentGrow > 0.001f) {
                     const float barHeight = itemHeight * accentGrow;
                     const float barTop = cursor.y + (itemHeight - barHeight) * 0.5f;
                     ImVec4 accent = ImGui::ColorConvertU32ToFloat4(AppColors::LightBlue);
@@ -679,17 +670,17 @@ void Editor::renderResourcePicker() {
 
                 if (ImGui::BeginPopup("##ResourcePopup")) {
                     if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy", "Ctrl+C", false, AppColors::LightGreen3)) {
-                        pushClipboard(editor->getName(), resource);
+                        g_application->getEditor()->pushClipboard(editor->getName(), resource);
                         ImGui::CloseCurrentPopup();
                     }
 
                     if (ImGui::MenuItemIcon(ICON_FA_COPY, "Copy with Texture", "Ctrl+Shift+C", false, AppColors::LightGreen3)) {
-                        pushClipboard(editor->getName(), resource, texture);
+                        g_application->getEditor()->pushClipboard(editor->getName(), resource, texture);
                         ImGui::CloseCurrentPopup();
                     }
 
-                    if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !m_clipboardHistory.empty())) {
-                        const auto& copy = m_clipboardHistory.back();
+                    if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !g_application->getEditor()->clipboardHistory().empty())) {
+                        const auto& copy = g_application->getEditor()->clipboardHistory().back();
                         if (!copy.resource) {
                             spdlog::error("No resource in clipboard to paste");
                         } else {
@@ -702,15 +693,15 @@ void Editor::renderResourcePicker() {
 
                     if (ImGui::MenuItemIcon(ICON_FA_CLONE, "Duplicate", nullptr, false, AppColors::LightBlue2)) {
                         editor->duplicateResource(i);
-                        m_selectedResources[id] = resources.size() - 1;
+                        m_selectedResource = resources.size() - 1;
                         editor->notifyResourceChanged(resources.size() - 1);
 
                         ImGui::CloseCurrentPopup();
                     }
 
                     if (ImGui::MenuItemIcon(ICON_FA_TRASH, "Delete", nullptr, false, AppColors::Gray)) {
-                        if (m_selectedResources[id] == i) {
-                            m_selectedResources[id] = -1;
+                        if (m_selectedResource == i) {
+                            m_selectedResource = -1;
                             editor->notifyResourceChanged(-1);
                         }
 
@@ -742,13 +733,13 @@ void Editor::renderResourcePicker() {
             if (ImGui::MenuItemIcon(ICON_FA_CIRCLE_PLUS, "Add Resource")) {
                 killEmitters(); // Stop all emitters before adding a new resource to avoid crashes
                 editor->addResource();
-                m_selectedResources[id] = resources.size() - 1;
+                m_selectedResource = resources.size() - 1;
                 editor->notifyResourceChanged(resources.size() - 1);
                 ImGui::CloseCurrentPopup();
             }
 
-            if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !m_clipboardHistory.empty())) {
-                const auto& copy = m_clipboardHistory.back();
+            if (ImGui::MenuItemIcon(ICON_FA_PASTE, "Paste", "Ctrl+V", false, AppColors::LightOrange, !g_application->getEditor()->clipboardHistory().empty())) {
+                const auto& copy = g_application->getEditor()->clipboardHistory().back();
                 if (!copy.resource) {
                     spdlog::error("No resource in clipboard to paste");
                 } else {
@@ -763,20 +754,20 @@ void Editor::renderResourcePicker() {
 
         if (ImGui::IsWindowFocused() || ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
             if (ImGui::IsKeyPressed(ImGuiKey_C) && ImGui::GetIO().KeyCtrl) {
-                if (editor && m_selectedResources[id] != -1) {
-                    const auto& resource = resources[m_selectedResources[id]];
+                if (editor && m_selectedResource != -1) {
+                    const auto& resource = resources[m_selectedResource];
                     
                     if (ImGui::GetIO().KeyShift) {
-                        pushClipboard(editor->getName(), resource, textures[resource.header.misc.textureIndex]);
+                        g_application->getEditor()->pushClipboard(editor->getName(), resource, textures[resource.header.misc.textureIndex]);
                     } else {
-                        pushClipboard(editor->getName(), resource);
+                        g_application->getEditor()->pushClipboard(editor->getName(), resource);
                     }
                 }
             }
 
             if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::GetIO().KeyCtrl) {
-                if (!m_clipboardHistory.empty()) {
-                    const auto& copy = m_clipboardHistory.back();
+                if (!g_application->getEditor()->clipboardHistory().empty()) {
+                    const auto& copy = g_application->getEditor()->clipboardHistory().back();
                     if (copy.resource) {
                         toPaste = &copy;
                         pasteIndex = -1; // Paste at end
@@ -1153,30 +1144,18 @@ void EditorInstance::renderTextureManager(bool* open) {
     ImGui::End();
 }
 
-void Editor::renderResourceEditor() {
-    if (ImGui::Begin("Resource Editor##Editor", &m_editorOpen)) {
-        ImGui::SliderFloat("Global Time Scale", &m_timeScale, 0.0f, 2.0f, "%.2f");
+void EditorInstance::renderResourceEditor(bool* open) {
+    if (ImGui::Begin("Resource Editor##Editor", open)) {
+        ImGui::SliderFloat("Global Time Scale", &g_application->getEditor()->timeScale(), 0.0f, 2.0f, "%.2f");
 
-        const auto editor = g_projectManager->getActiveEditorAs<EditorInstance>();
-        if (!editor) {
-            ImGui::Text("No editor open");
-            ImGui::End();
-            return;
-        }
-
-        m_activeEditor = editor;
+        auto* const editor = this;
 
         auto& archive = editor->getArchive();
         auto& resources = archive.getResources();
         auto& textures = archive.getTextures();
 
-        const auto id = editor->getUniqueID();
-        if (!m_selectedResources.contains(id)) {
-            m_selectedResources[id] = -1;
-        }
-        
-        if (m_selectedResources[id] != -1) {
-            auto& resource = resources[m_selectedResources[id]];
+        if (m_selectedResource != -1) {
+            auto& resource = resources[m_selectedResource];
             const auto& texture = textures[resource.header.misc.textureIndex];
 
             if (ImGui::IconButton(ICON_FA_PLAY, "Play Emitter", AppColors::LightGreen)) {
@@ -1240,8 +1219,6 @@ void Editor::renderResourceEditor() {
     }
 
     ImGui::End();
-
-    m_activeEditor.reset();
 }
 
 void Editor::renderSettings() {
@@ -1520,11 +1497,7 @@ void Editor::updateRenderSettings(bool swapRenderer) {
     }
 }
 
-void Editor::renderHeaderEditor(SPLResourceHeader& header) const {
-    if (m_activeEditor.expired()) {
-        return;
-    }
-
+void EditorInstance::renderHeaderEditor(SPLResourceHeader& header) {
     LOCK_EDITOR();
 
     auto& flags = header.flags;
@@ -1783,7 +1756,7 @@ void Editor::renderHeaderEditor(SPLResourceHeader& header) const {
     }
 }
 
-void Editor::renderBehaviorEditor(SPLResource& res) {
+void EditorInstance::renderBehaviorEditor(SPLResource& res) {
     LOCK_EDITOR();
     std::vector<std::shared_ptr<SPLBehavior>> toRemove;
 
@@ -1867,7 +1840,7 @@ void Editor::renderBehaviorEditor(SPLResource& res) {
     }
 }
 
-bool Editor::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavior>& gravity) {
+bool EditorInstance::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavior>& gravity) {
     LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##gravityEditor", hovered, s_hoverAccentColor);
@@ -1881,7 +1854,7 @@ bool Editor::renderGravityBehaviorEditor(const std::shared_ptr<SPLGravityBehavio
     return ImGui::BeginPopupContextItem("##behaviorContext");
 }
 
-bool Editor::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>& random) {
+bool EditorInstance::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>& random) {
     LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##randomEditor", hovered, s_hoverAccentColor);
@@ -1896,7 +1869,7 @@ bool Editor::renderRandomBehaviorEditor(const std::shared_ptr<SPLRandomBehavior>
     return ImGui::BeginPopupContextItem("##behaviorContext");
 }
 
-bool Editor::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>& magnet) {
+bool EditorInstance::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>& magnet) {
     LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##magnetEditor", hovered, s_hoverAccentColor);
@@ -1911,7 +1884,7 @@ bool Editor::renderMagnetBehaviorEditor(const std::shared_ptr<SPLMagnetBehavior>
     return ImGui::BeginPopupContextItem("##behaviorContext");
 }
 
-bool Editor::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& spin) {
+bool EditorInstance::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& spin) {
     LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##spinEditor", hovered, s_hoverAccentColor);
@@ -1931,7 +1904,7 @@ bool Editor::renderSpinBehaviorEditor(const std::shared_ptr<SPLSpinBehavior>& sp
     return ImGui::BeginPopupContextItem("##behaviorContext");
 }
 
-bool Editor::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisionPlaneBehavior>& collisionPlane) {
+bool EditorInstance::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisionPlaneBehavior>& collisionPlane) {
     LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##collisionPlaneEditor", hovered, s_hoverAccentColor);
@@ -1951,7 +1924,7 @@ bool Editor::renderCollisionPlaneBehaviorEditor(const std::shared_ptr<SPLCollisi
     return ImGui::BeginPopupContextItem("##behaviorContext");
 }
 
-bool Editor::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenceBehavior>& convergence) {
+bool EditorInstance::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenceBehavior>& convergence) {
     LOCK_EDITOR();
     static bool hovered = false;
     ImGui::BeginHoverBorderChild("##convergenceEditor", hovered, s_hoverAccentColor);
@@ -1966,11 +1939,7 @@ bool Editor::renderConvergenceBehaviorEditor(const std::shared_ptr<SPLConvergenc
     return ImGui::BeginPopupContextItem("##behaviorContext");
 }
 
-void Editor::renderAnimationEditor(SPLResource& res) {
-    if (m_activeEditor.expired()) {
-        return;
-    }
-
+void EditorInstance::renderAnimationEditor(SPLResource& res) {
     LOCK_EDITOR();
 
     if (ImGui::IconButton(ICON_FA_CIRCLE_PLUS , "Add Animation...", AppColors::Turquoise)) {
@@ -2026,7 +1995,7 @@ void Editor::renderAnimationEditor(SPLResource& res) {
     }
 }
 
-bool Editor::renderScaleAnimEditor(SPLScaleAnim& res) {
+bool EditorInstance::renderScaleAnimEditor(SPLScaleAnim& res) {
     LOCK_EDITOR();
 
     static bool hovered = false;
@@ -2070,7 +2039,7 @@ bool Editor::renderScaleAnimEditor(SPLScaleAnim& res) {
     return result;
 }
 
-bool Editor::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res) {
+bool EditorInstance::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res) {
     LOCK_EDITOR();
 
     static bool hovered = false;
@@ -2179,7 +2148,7 @@ bool Editor::renderColorAnimEditor(const SPLResource& mainRes, SPLColorAnim& res
     return result;
 }
 
-bool Editor::renderAlphaAnimEditor(SPLAlphaAnim& res) {
+bool EditorInstance::renderAlphaAnimEditor(SPLAlphaAnim& res) {
     LOCK_EDITOR();
 
     static bool hovered = false;
@@ -2249,7 +2218,7 @@ bool Editor::renderAlphaAnimEditor(SPLAlphaAnim& res) {
     return result;
 }
 
-bool Editor::renderTexAnimEditor(SPLTexAnim& res) {
+bool EditorInstance::renderTexAnimEditor(SPLTexAnim& res) {
     LOCK_EDITOR();
 
     static bool hovered = false;
@@ -2338,11 +2307,7 @@ bool Editor::renderTexAnimEditor(SPLTexAnim& res) {
     return result;
 }
 
-void Editor::renderChildrenEditor(SPLResource& res) {
-    if (m_activeEditor.expired()) {
-        return;
-    }
-
+void EditorInstance::renderChildrenEditor(SPLResource& res) {
     LOCK_EDITOR();
 
     if (!res.childResource) {
@@ -2558,7 +2523,7 @@ void Editor::renderChildrenEditor(SPLResource& res) {
     }
 }
 
-void Editor::helpPopup(std::string_view text) const {
+void EditorInstance::helpPopup(std::string_view text) const {
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
 
@@ -2577,8 +2542,8 @@ void Editor::renderDebugShapes(const std::shared_ptr<EditorInstance>& editor, st
     renderers.push_back(m_debugRenderer.get());
 
     // Render edited emitter and collision plane if any
-    if (m_selectedResources[editor->getUniqueID()] != -1) {
-        const auto& resource = resources[m_selectedResources[editor->getUniqueID()]];
+    if (editor->getSelectedResource() != -1) {
+        const auto& resource = resources[editor->getSelectedResource()];
 
         if (m_settings.displayEditedEmitter) {
             glm::vec3 axis;
@@ -2900,13 +2865,9 @@ void EditorInstance::importTempTexture() {
     m_particleSystem.getRenderer().setTextures(textures);
 }
 
-void Editor::ensureValidSelection(const std::shared_ptr<EditorInstance>& editor) {
-    const auto id = editor->getUniqueID();
-    const auto selectedResource = m_selectedResources[id];
-
-    if (selectedResource != -1 && selectedResource >= editor->getArchive().getResourceCount()) {
-        m_selectedResources[id] = -1;
-        editor->notifyResourceChanged(-1);
+void EditorInstance::ensureValidSelection() {
+    if (m_selectedResource != INVALID_RESOURCE && m_selectedResource >= m_archive.getResourceCount()) {
+        notifyResourceChanged(INVALID_RESOURCE);
     }
 }
 

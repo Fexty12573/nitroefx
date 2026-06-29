@@ -70,7 +70,6 @@ EditorInstance::EditorInstance(bool isTemp)
     m_uniqueID = SPLRandom::nextU64();
     m_updateProj = true;
 
-    g_application->getEditor()->selectResource(m_uniqueID, INVALID_RESOURCE);
     notifyResourceChanged(INVALID_RESOURCE);
 
     // Choose particle renderer backend
@@ -201,7 +200,7 @@ void EditorInstance::update(float deltaTime) {
     m_particleSystem.update(deltaTime * timeScale);
 }
 
-void EditorInstance::playEmitter(EmitterSpawnType spawnType, float interval) {
+void EditorInstance::playEmitter(EmitterSpawnType spawnType) {
     const auto resourceIndex = m_selectedResource;
     if (resourceIndex >= m_archive.getResources().size()) {
         spdlog::warn("Invalid resource index: {}", resourceIndex);
@@ -211,16 +210,16 @@ void EditorInstance::playEmitter(EmitterSpawnType spawnType, float interval) {
     m_particleSystem.addEmitter(m_archive.getResource(resourceIndex), spawnType == EmitterSpawnType::Looped);
 
     if (spawnType == EmitterSpawnType::Interval) {
-        m_emitterTasks.emplace_back(resourceIndex, Clock::now(), std::chrono::duration<float>(interval));
+        m_emitterTasks.emplace_back(resourceIndex, Clock::now(), std::chrono::duration<float>(m_emitterInterval));
     }
 }
 
-void EditorInstance::playAllEmitters(EmitterSpawnType spawnType, float interval) {
+void EditorInstance::playAllEmitters(EmitterSpawnType spawnType) {
     for (size_t i = 0; i < m_archive.getResources().size(); ++i) {
         m_particleSystem.addEmitter(m_archive.getResource(i), spawnType == EmitterSpawnType::Looped);
 
         if (spawnType == EmitterSpawnType::Interval) {
-            m_emitterTasks.emplace_back(i, Clock::now(), std::chrono::duration<float>(interval));
+            m_emitterTasks.emplace_back(i, Clock::now(), std::chrono::duration<float>(m_emitterInterval));
         }
     }
 }
