@@ -15,3 +15,6 @@
 [submodule "external/implot"]
 	path = external/implot
 	url = https://github.com/epezent/implot.git
+[submodule "external/imnodes"]
+	path = external/imnodes
+	url = https://github.com/Nelarius/imnodes
